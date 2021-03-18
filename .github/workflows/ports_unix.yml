@@ -174,15 +174,3 @@ jobs:
       if: failure()
       run: tests/run-tests.py --print-failures
 
-  macos:
-    runs-on: macos-11.0
-    steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-python@v1
-    - name: Build
-      run: source tools/ci.sh && ci_unix_macos_build
-    - name: Run tests
-      run: source tools/ci.sh && ci_unix_macos_run_tests
-    - name: Print failures
-      if: failure()
-      run: tests/run-tests.py --print-failures

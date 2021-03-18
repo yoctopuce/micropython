@@ -1,0 +1,6 @@
+/Debug/
+.launches
+*.sublime-workspace
+**.obj
+micropython.lib
+
