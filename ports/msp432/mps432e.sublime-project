@@ -1,0 +1,44 @@
+{
+	"build_systems":
+	[
+		{
+			"cmd":
+			[
+				"gmake"
+			],
+			"file_regex": "^(?:gmake: \\*\\*\\* \\[)?([A-Za-z0-9_./]*?):([0-9]*):(.*)$",
+			"name": "Build Hub",
+			"variants":
+			[
+				{
+					"cmd":
+					[
+						"gmake",
+						"clean"
+					],
+					"name": "clean"
+				},
+				{
+					"cmd":
+					[
+						"gmake",
+						"V=1"
+					],
+					"name": "verbose"
+				}
+			],
+			"working_dir": "$folder"
+		}
+	],
+	"folders":
+	[
+		{
+			"name": "msp432",
+			"path": "."
+		},
+		{
+			"name": "py",
+			"path": "..\\..\\py"
+		}
+	]
+}
