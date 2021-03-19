@@ -16,7 +16,7 @@ void do_str(const char *src, mp_parse_input_kind_t input_kind) {
         mp_lexer_t *lex = mp_lexer_new_from_str_len(MP_QSTR__lt_stdin_gt_, src, strlen(src), 0);
         qstr source_name = lex->source_name;
         mp_parse_tree_t parse_tree = mp_parse(lex, input_kind);
-        mp_obj_t module_fun = mp_compile(&parse_tree, source_name, MP_EMIT_OPT_NONE, true);
+        mp_obj_t module_fun = mp_compile(&parse_tree, source_name, true);
         mp_call_function_0(module_fun);
         nlr_pop();
     } else {
@@ -59,21 +59,7 @@ void micro_python() {
     mp_deinit();
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#if MICROPY_ENABLE_GC
 void gc_collect(void) {
     // WARNING: This gc_collect implementation doesn't try to get root
     // pointers from CPU registers, and thus may function incorrectly.
@@ -83,6 +69,7 @@ void gc_collect(void) {
     gc_collect_end();
     gc_dump_info();
 }
+#endif
 
 mp_lexer_t *mp_lexer_new_from_file(const char *filename) {
     mp_raise_OSError(MP_ENOENT);

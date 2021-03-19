@@ -9,6 +9,9 @@ CROSS = 0
 # qstr definitions (must come before including py.mk)
 QSTR_DEFS = qstrdefsport.h
 
+FROZEN_MANIFEST ?= frozentest.py
+
+
 # include py core make definitions
 include $(TOP)/py/py.mk
 
@@ -29,20 +32,19 @@ BOARD_C = $(SYSCFG_DIR)/ti_drivers_config.c
 
 ALL_H = $(BOARD_H)
 YSOURCES =  $(BOARD_C) main_freertos.c micropython_main.c \
-			lib/utils/printf.c \
 			lib/utils/stdout_helpers.c \
 			lib/utils/pyexec.c \
 			lib/libc/string0.c \
 			lib/mp-readline/readline.c
 
 
-PY_PORT_SOURCE =  $(BUILD)/_frozen_mpy.c
+PY_PORT_SOURCE =
 
 
 PY_PORT_O = $(patsubst %.c, $(BUILD)/%.o, $(PY_PORT_SOURCE))
 
 
-OBJ = $(PY_CORE_O) $(PY_PORT_O) $(patsubst %.c, $(BUILD)/%.o, $(YSOURCES))
+OBJ = $(PY_O) $(PY_PORT_O) $(patsubst %.c, $(BUILD)/%.o, $(YSOURCES))
 
 
 
@@ -94,23 +96,12 @@ LIBS =-Wl,-T,MSP_EXP432E401Y_FREERTOS.lds \
 
 all: $(BUILD)/$(NAME).out Debug Debug/$(NAME).out
 
-ifeq ($(OS),Windows_NT)
-
-$(BUILD)/_frozen_mpy.c: frozentest.mpy $(BUILD)/genhdr/qstrdefs.generated.h
-	$(ECHO) "MISC freezing bytecode"
-	$(PYTHON) $(TOP)/tools/mpy-tool.py -f -q $(BUILD)/genhdr/qstrdefs.preprocessed.h -mlongint-impl=none $< > $@
-
-endif
-
 $(FREERTOS_PROJECT)$(FREERTOS_LIB):
 	$(Q)$(MAKE) -C $(FREERTOS_PROJECT) $(FREERTOS_LIB)
-
-
 
 $(BOARD_C): portable.syscfg
 	@ echo Generating configuration files...
 	@ $(SYSCONFIG_TOOL) -s $(SYSCONFIG_PRODUCT) -o $(@D) --compiler gcc $<
-
 
 Debug/$(NAME).out $(BUILD)/$(NAME).out: $(BOARD_C) $(OBJ) $(FREERTOS_PROJECT)$(FREERTOS_LIB)
 	@ echo linking $@
@@ -131,8 +122,6 @@ CLEAN_EXTRA = Debug
 
 clean_all: clean
 	$(Q)$(MAKE) -C $(FREERTOS_PROJECT) clean
-
-
 
 include $(TOP)/py/mkrules.mk
 
