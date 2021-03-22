@@ -1,4 +1,4 @@
-BUILD_VERBOSE=1
+#BUILD_VERBOSE=1
 include ../../py/mkenv.mk
 
 # include diffenten path py core make definitions
@@ -111,10 +111,10 @@ Debug:
 	$(Q)$(MKDIR) $(@)
 
 .PHONY: micropython.lib
-micropython.lib: $(PY_CORE_O) $(PY_PORT_O)
+micropython.lib: $(PY_O) $(PY_PORT_O)
 	@ echo build micropython core lib ($@)
 	@ $(RM) -rf $@
-	@ $(AR) -cr $@ $(PY_CORE_O) $(PY_PORT_O)
+	@ $(AR) -cr $@ $(PY_O) $(PY_PORT_O)
 
 
 
