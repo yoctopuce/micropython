@@ -111,8 +111,7 @@ int main(void) {
 // ! \return none
 // !
 // *****************************************************************************
-void vApplicationMallocFailedHook()
-{
+void vApplicationMallocFailedHook() {
     /* Handle Memory Allocation Errors */
     while (1)
     {
@@ -128,10 +127,8 @@ void vApplicationMallocFailedHook()
 // ! \return none
 // !
 // *****************************************************************************
-void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName)
-{
+void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName) {
     //Handle FreeRTOS Stack Overflow
-    while (1)
-    {
+    while (1) {
     }
 }

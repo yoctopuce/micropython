@@ -85,8 +85,7 @@ void gpioButtonFxn(uint_least8_t index) {
  *  Handle the user input. Currently this console does not handle
  *  user back-spaces or other "hard" characters.
  */
-void simpleConsole(UART_Handle uart)
-{
+void simpleConsole(UART_Handle uart) {
     char cmd;
     int status;
     char tempStr[8];
@@ -158,7 +157,7 @@ void do_str(const char *src, mp_parse_input_kind_t input_kind) {
 #endif
 
 UART_Handle uart;
-void debug_log(const char * line) {
+void debug_log(const char *line) {
     UART_write(uart, line, strlen(line));
 }
 
@@ -203,7 +202,7 @@ void nlr_jump_fail(void *val) {
     // printf("FATAL: uncaught NLR %p\n", val);
     // exit(1);
     debug_log("FATAL: uncaught NLR\n");
-    while(1) {
+    while (1) {
         ;
     }
 }
