@@ -62,7 +62,7 @@
 
 // type definitions for the specific machine
 
-#define MICROPY_MAKE_POINTER_CALLABLE(p) ((void*)((mp_uint_t)(p) | 1))
+#define MICROPY_MAKE_POINTER_CALLABLE(p) ((void *)((mp_uint_t)(p) | 1))
 
 // This port is intended to be 32-bit, but unfortunately, int32_t for
 // different targets may be defined in different ways - either as int
@@ -77,7 +77,7 @@ typedef long mp_off_t;
 
 #define MP_PLAT_PRINT_STRN(str, len) mp_hal_stdout_tx_strn_cooked(str, len)
 
-//#define MICROPY_USE_INTERNAL_PRINTF (1)
+// #define MICROPY_USE_INTERNAL_PRINTF (1)
 
 // extra built in names to add to the global namespace
 #define MICROPY_PORT_BUILTINS \

@@ -33,7 +33,7 @@ static char heap[2048];
 
 void micro_python() {
     int stack_dummy;
-    stack_top = (char*)&stack_dummy;
+    stack_top = (char *)&stack_dummy;
 
     #if MICROPY_ENABLE_GC
     gc_init(heap, heap + sizeof(heap));
@@ -51,8 +51,8 @@ void micro_python() {
     #else
     pyexec_friendly_repl();
     #endif
-    //do_str("print('hello world!', list(x+1 for x in range(10)), end='eol\\n')", MP_PARSE_SINGLE_INPUT);
-    //do_str("for i in range(10):\r\n  print(i)", MP_PARSE_FILE_INPUT);
+    // do_str("print('hello world!', list(x+1 for x in range(10)), end='eol\\n')", MP_PARSE_SINGLE_INPUT);
+    // do_str("for i in range(10):\r\n  print(i)", MP_PARSE_FILE_INPUT);
     #else
     pyexec_frozen_module("frozentest.py");
     #endif
@@ -85,11 +85,15 @@ mp_obj_t mp_builtin_open(size_t n_args, const mp_obj_t *args, mp_map_t *kwargs) 
 MP_DEFINE_CONST_FUN_OBJ_KW(mp_builtin_open_obj, 1, mp_builtin_open);
 
 void nlr_jump_fail(void *val) {
-    while (1);
+    while (1){
+        ;
+    }
 }
 
 void NORETURN __fatal_error(const char *msg) {
-    while (1);
+    while (1){
+        ;
+    }
 }
 
 #ifndef NDEBUG
@@ -102,18 +106,16 @@ void MP_WEAK __assert_func(const char *file, int line, const char *func, const c
 
 
 #include "ti_drivers_config.h"
-//#include <Board.h>
 #include <ti/drivers/UART.h>
 
 UART_Params uartParams;
 UART_Handle uart;
-const char consoleDisplay[]   = "\fStarting micropython...\r\n";
+const char consoleDisplay[] = "\fStarting micropython...\r\n";
 
 /*
  *  ======== pythonThread ========
  */
-void *pythonThread(void *arg0)
-{
+void *pythonThread(void *arg0) {
 
     UART_init();
 
@@ -123,8 +125,8 @@ void *pythonThread(void *arg0)
      *  following.
      */
     UART_Params_init(&uartParams);
-    uartParams.writeDataMode  = UART_DATA_BINARY;
-    uartParams.readDataMode   = UART_DATA_BINARY;
+    uartParams.writeDataMode = UART_DATA_BINARY;
+    uartParams.readDataMode = UART_DATA_BINARY;
     uartParams.readReturnMode = UART_RETURN_FULL;
 
 
@@ -134,7 +136,9 @@ void *pythonThread(void *arg0)
         /* Create a UART for the console */
         uart = UART_open(CONFIG_UART_0, &uartParams);
         if (uart == NULL) {
-            while (1);
+            while (1){
+                ;
+            }
         }
         UART_write(uart, consoleDisplay, sizeof(consoleDisplay));
         //simpleConsole(uart);
@@ -147,7 +151,9 @@ void *pythonThread(void *arg0)
          */
         UART_close(uart);
     }
-    while (1);
+    while (1) {
+        ;
+    }
 }
 
 
@@ -160,7 +166,7 @@ int mp_hal_stdin_rx_chr(void) {
     char cmd = 0;
     int status = UART_read(uart, &cmd, sizeof(cmd));
     if (status == 0) {
-        //UART_write(uart, readErrDisplay, sizeof(readErrDisplay));
+        // UART_write(uart, readErrDisplay, sizeof(readErrDisplay));
         cmd = '?';
     }
 
@@ -172,9 +178,3 @@ void mp_hal_stdout_tx_strn(const char *str, mp_uint_t len) {
     UART_write(uart, str, len);
 }
 
-
-#if 0
-void mp_hal_stdout_tx_strn_cooked (const char *str, size_t len) {
-
-}
-#endif

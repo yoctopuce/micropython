@@ -69,8 +69,7 @@ sem_t semConsole;
  *  a button push. The uartEnabled variable protects use against any
  *  additional interrupts cased by the bouncing of the button.
  */
-void gpioButtonFxn(uint_least8_t index)
-{
+void gpioButtonFxn(uint_least8_t index) {
 
     /* If disabled, enable and post the semaphore */
     if (uartEnabled == false) {
@@ -159,9 +158,8 @@ void do_str(const char *src, mp_parse_input_kind_t input_kind) {
 #endif
 
 UART_Handle uart;
-void debug_log(const char * line)
-{
-      UART_write(uart, line, strlen(line));
+void debug_log(const char * line) {
+    UART_write(uart, line, strlen(line));
 }
 
 
@@ -170,7 +168,7 @@ static char heap[16384];
 mp_obj_t execute_from_str(const char *str) {
     nlr_buf_t nlr;
     if (nlr_push(&nlr) == 0) {
-        qstr src_name = 1/*MP_QSTR_*/;
+        qstr src_name = 1 /*MP_QSTR_*/;
         mp_lexer_t *lex = mp_lexer_new_from_str_len(src_name, str, strlen(str), false);
         mp_parse_tree_t pt = mp_parse(lex, MP_PARSE_FILE_INPUT);
         mp_obj_t module_fun = mp_compile(&pt, src_name, MP_EMIT_OPT_NONE, false);
@@ -202,14 +200,11 @@ mp_import_stat_t mp_import_stat(const char *path) {
 }
 
 void nlr_jump_fail(void *val) {
-    //printf("FATAL: uncaught NLR %p\n", val);
-    //exit(1);
+    // printf("FATAL: uncaught NLR %p\n", val);
+    // exit(1);
     debug_log("FATAL: uncaught NLR\n");
-    while(1);
+    while(1) {
+        ;
+    }
 }
-
-
-
-
-
 

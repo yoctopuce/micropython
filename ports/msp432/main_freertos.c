@@ -61,8 +61,7 @@ extern void *pythonThread(void *arg0);
 /*
  *  ======== main ========
  */
-int main(void)
-{
+int main(void) {
     pthread_t thread;
     pthread_attr_t attrs;
     struct sched_param priParam;
@@ -81,13 +80,17 @@ int main(void)
     retc |= pthread_attr_setstacksize(&attrs, THREADSTACKSIZE);
     if (retc != 0) {
         /* failed to set attributes */
-        while (1) {}
+        while (1) {
+
+        }
     }
 
     retc = pthread_create(&thread, &attrs, pythonThread, NULL);
     if (retc != 0) {
         /* pthread_create() failed */
-        while (1) {}
+        while (1) {
+
+        }
     }
 
 
@@ -96,18 +99,18 @@ int main(void)
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 
-    return (0);
+    return 0;
 }
 
-//*****************************************************************************
+// *****************************************************************************
 //
-//! \brief Application defined malloc failed hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
+// ! \brief Application defined malloc failed hook
+// !
+// ! \param  none
+// !
+// ! \return none
+// !
+// *****************************************************************************
 void vApplicationMallocFailedHook()
 {
     /* Handle Memory Allocation Errors */
@@ -116,15 +119,15 @@ void vApplicationMallocFailedHook()
     }
 }
 
-//*****************************************************************************
+// *****************************************************************************
 //
-//! \brief Application defined stack overflow hook
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//*****************************************************************************
+// ! \brief Application defined stack overflow hook
+// !
+// ! \param  none
+// !
+// ! \return none
+// !
+// *****************************************************************************
 void vApplicationStackOverflowHook(TaskHandle_t pxTask, char *pcTaskName)
 {
     //Handle FreeRTOS Stack Overflow
