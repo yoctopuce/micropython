@@ -14,6 +14,7 @@ MKDIR = "$(XDCTOOLS)mkdir"
 SED = "$(XDCTOOLS)sed"
 TOUCH = "$(XDCTOOLS)touch"
 AR = "$(GCC_ARMCOMPILER)/bin/arm-none-eabi-ar"
+NM = "$(GCC_ARMCOMPILER)/bin/arm-none-eabi-nm"
 
 endif
 
