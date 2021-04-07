@@ -110,17 +110,18 @@ Debug/$(NAME).out $(BUILD)/$(NAME).out: $(BOARD_C) $(OBJ) $(FREERTOS_PROJECT)$(F
 Debug:
 	$(Q)$(MKDIR) $(@)
 
-.PHONY: micropython.lib
-micropython.lib: $(PY_O) $(PY_PORT_O)
+.PHONY: micropython.a
+micropython.a: $(PY_O) $(PY_PORT_O)
 	@ echo build micropython core lib ($@)
 	@ $(RM) -rf $@
-	@ $(AR) -cr $@ $(PY_O) $(PY_PORT_O)
+	@ $(AR) -cr $@ $^
 
 
 
 CLEAN_EXTRA = Debug
 
 clean_all: clean
+	@ $(RM) -rf micropython.a
 	$(Q)$(MAKE) -C $(FREERTOS_PROJECT) clean
 
 include $(TOP)/py/mkrules.mk
