@@ -12,6 +12,25 @@
 #include <stdarg.h>
 #include <assert.h>
 
+// Yoctopuce specific vvvvvv
+//
+// Allow compilation of re1.5 lib without explicit C file inclusion from modre.c
+#include "ydef_private.h"
+#ifndef __FILE_ID__
+// when included by re1.5 original files, set FILE_ID and assert macro
+#define __FILE_ID__ MK_FILEID('R','E','G')
+#ifdef assert
+#undef assert
+#endif
+#define re1_5_fatal(cond)       (void)(!(cond) ? mpy_panic(MK_ORIGIN(MK_FILEID('R','E','G'), __LINE__), 0) : 0)
+#define assert(cond)			re1_5_fatal(cond)
+#endif
+#include "py/runtime.h"
+#include "py/stackctrl.h"
+#include "py/unicode.h"
+#define re1_5_stack_chk()       MP_STACK_CHECK()
+// Yoctopuce specific ^^^^^^
+
 #define nil ((void*)0)
 #define nelem(x) (sizeof(x)/sizeof((x)[0]))
 
