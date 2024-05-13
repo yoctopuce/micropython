@@ -88,7 +88,11 @@
 #ifdef MP_CONFIGFILE
 #include MP_CONFIGFILE
 #else
-#include <mpconfigport.h>
+// Yoctopuce specific vvvvvv
+//
+// Use a specific filename for our setting file, to avoid confusion with the multiple mpconfig files in mpy tree
+#include <mpylink/ympconfig.h>
+// Yoctopuce specific ^^^^^^
 #endif
 
 // Ports/boards should set this, but default to level=core.

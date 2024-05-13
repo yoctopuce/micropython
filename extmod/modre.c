@@ -474,6 +474,10 @@ const mp_obj_module_t mp_module_re = {
 MP_REGISTER_EXTENSIBLE_MODULE(MP_QSTR_re, mp_module_re);
 #endif
 
+// Yoctopuce specific vvvvvv
+//
+// Include C files explicitely in projects and makefile
+#if 0
 // Source files #include'd here to make sure they're compiled in
 // only if module is enabled by config setting.
 
@@ -489,5 +493,8 @@ MP_REGISTER_EXTENSIBLE_MODULE(MP_QSTR_re, mp_module_re);
 #include "lib/re1.5/dumpcode.c"
 #undef printf
 #endif
+
+#endif
+// Yoctopuce specific ^^^^^^
 
 #endif // MICROPY_PY_RE
