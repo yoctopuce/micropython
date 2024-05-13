@@ -336,7 +336,6 @@ typedef const char *mp_rom_error_text_t;
 
 // Portable implementations of CLZ and CTZ intrinsics
 #ifdef _MSC_VER
-#include <intrin.h>
 
 static inline uint32_t mp_clz(uint32_t x) {
     unsigned long lz = 0;
@@ -414,9 +413,9 @@ static inline uint32_t mp_clz_mpi(mp_int_t x) {
 
     // ugly, but should compile to single intrinsic unless O0 is set
     if (mp_check(sizeof(mp_int_t) == sizeof(long))) {
-        return mp_clzl((unsigned long)x);
+        return (uint32_t)mp_clzl((unsigned long)x);
     } else {
-        return mp_clzll((unsigned long long)x);
+        return (uint32_t)mp_clzll((unsigned long long)x);
     }
     #endif
 }

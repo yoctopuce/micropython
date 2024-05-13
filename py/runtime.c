@@ -101,7 +101,10 @@ void mp_init(void) {
     #if MICROPY_EMIT_NATIVE
     MP_STATE_VM(default_emit_opt) = MP_EMIT_OPT_NONE;
     #endif
+    #if MICROPY_COMP_PREDEFINED_CONST
+    MP_STATE_VM(predefined_const) = mp_const_none;
     #endif
+    #endif // MICROPY_ENABLE_COMPILER
 
     // init global module dict
     mp_obj_dict_init(&MP_STATE_VM(mp_loaded_modules_dict), MICROPY_LOADED_MODULES_DICT_SIZE);
@@ -157,9 +160,12 @@ void mp_init(void) {
     MP_STATE_VM(sys_mutable[MP_SYS_MUTABLE_PS2]) = MP_OBJ_NEW_QSTR(MP_QSTR__dot__dot__dot__space_);
     #endif
 
-    #if MICROPY_PY_SYS_SETTRACE
+    #if MICROPY_PY_SYS_SETTRACE == 1
     MP_STATE_THREAD(prof_trace_callback) = MP_OBJ_NULL;
     MP_STATE_THREAD(prof_callback_is_executing) = false;
+    MP_STATE_THREAD(current_code_state) = NULL;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    MP_STATE_THREAD(prof_systrace_enabled) = false;
     MP_STATE_THREAD(current_code_state) = NULL;
     #endif
 
@@ -1533,6 +1539,11 @@ mp_obj_t mp_import_name(qstr name, mp_obj_t fromlist, mp_obj_t level) {
     return mp_builtin___import__(5, args);
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 mp_obj_t mp_import_from(mp_obj_t module, qstr name) {
     DEBUG_printf("import from %p %s\n", module, qstr_str(name));
 
@@ -1581,6 +1592,10 @@ mp_obj_t mp_import_from(mp_obj_t module, qstr name) {
     #endif
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
+
 void mp_import_all(mp_obj_t module) {
     DEBUG_printf("import all %p\n", module);
 
@@ -1620,10 +1635,13 @@ mp_obj_t mp_parse_compile_execute(mp_lexer_t *lex, mp_parse_input_kind_t parse_i
     mp_obj_t module_fun = mp_compile(&parse_tree, source_name, parse_input_kind == MP_PARSE_SINGLE_INPUT);
 
     mp_obj_t ret;
-    if (MICROPY_PY_BUILTINS_COMPILE && globals == NULL) {
+    #if MICROPY_PY_BUILTINS_COMPILE && MICROPY_PY_BUILTINS_CODE == MICROPY_PY_BUILTINS_CODE_MINIMUM
+    if (globals == NULL) {
         // for compile only, return value is the module function
         ret = module_fun;
-    } else {
+    } else
+    #endif
+    {
         // execute module function and get return value
         ret = mp_call_function_0(module_fun);
     }

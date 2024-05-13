@@ -28,19 +28,13 @@
 #define MICROPY_INCLUDED_PY_PROFILING_H
 
 #include "py/emitglue.h"
+#include "py/objcode.h"
 
 #if MICROPY_PY_SYS_SETTRACE
 
-#define mp_prof_is_executing MP_STATE_THREAD(prof_callback_is_executing)
+#if MICROPY_PY_SYS_SETTRACE == 1
 
-typedef struct _mp_obj_code_t {
-    // TODO this was 4 words
-    mp_obj_base_t base;
-    const mp_module_context_t *context;
-    const mp_raw_code_t *rc;
-    mp_obj_dict_t *dict_locals;
-    mp_obj_t lnotab;
-} mp_obj_code_t;
+#define mp_prof_is_executing MP_STATE_THREAD(prof_callback_is_executing)
 
 typedef struct _mp_obj_frame_t {
     mp_obj_base_t base;
@@ -53,10 +47,29 @@ typedef struct _mp_obj_frame_t {
     bool trace_opcodes;
 } mp_obj_frame_t;
 
+mp_obj_t mp_obj_new_code(const mp_module_context_t *mc, const mp_raw_code_t *rc);
+
+#elif MICROPY_PY_SYS_SETTRACE == 2
+
+typedef struct _mp_frame_t {
+    const mp_code_state_t *code_state;
+    mp_uint_t startTicks;
+    mp_uint_t lasti;
+    mp_uint_t lineno;
+} mp_frame_t;
+
+// this function must be provided by the debugger implementation in C
+void *mp_prof_trace_cb(const mp_frame_t *frame, qstr event_qstr, void *arg);
+
+#endif
+
 void mp_prof_extract_prelude(const byte *bytecode, mp_bytecode_prelude_t *prelude);
 
-mp_obj_t mp_obj_new_code(const mp_module_context_t *mc, const mp_raw_code_t *rc);
+#if MICROPY_PY_SYS_SETTRACE == 1
 mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state);
+#elif MICROPY_PY_SYS_SETTRACE == 2
+mp_frame_t *mp_new_frame(const mp_code_state_t *code_state);
+#endif
 
 // This is the implementation for the sys.settrace
 mp_obj_t mp_prof_settrace(mp_obj_t callback);
@@ -65,7 +78,7 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state);
 mp_obj_t mp_prof_frame_update(const mp_code_state_t *code_state);
 
 // For every VM instruction tick this function deduces events from the state
-mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, bool is_exception);
+mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, mp_obj_t exception_or_none);
 
 // This section is for debugging the settrace feature itself, and is not intended
 // to be included in production/release builds.
