@@ -85,14 +85,16 @@
 // Enable everything (e.g. coverage)
 #define MICROPY_CONFIG_ROM_LEVEL_EVERYTHING (50)
 
-#ifdef MP_CONFIGFILE
+#if defined(MP_CONFIGFILE)
 #include MP_CONFIGFILE
-#else
+#elif defined(VIRTUAL_HUB) || defined(TEXAS_API)
 // Yoctopuce specific vvvvvv
 //
 // Use a specific filename for our setting file, to avoid confusion with the multiple mpconfig files in mpy tree
 #include <mpylink/ympconfig.h>
 // Yoctopuce specific ^^^^^^
+#else
+#include <mpconfigport.h>
 #endif
 
 // Ports/boards should set this, but default to level=core.
