@@ -770,7 +770,7 @@ class CompiledModule:
             print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C")
             n = struct.unpack("<I", struct.pack("<f", obj))[0]
             n = ((n & ~0x3) | 2) + 0x80800000
-            print("#define %s ((mp_rom_obj_t)(0x%08x))" % (macro_name, n))
+            print("#define %s ((mp_rom_obj_t)(size_t)(0x%08x))" % (macro_name, n))
             print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_D")
             n = struct.unpack("<Q", struct.pack("<d", obj))[0]
             n += 0x8004000000000000
