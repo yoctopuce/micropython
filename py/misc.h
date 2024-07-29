@@ -220,10 +220,10 @@ void vstr_printf(vstr_t *vstr, const char *fmt, ...);
 #define CHECKBUF(buf, max_size) char buf[max_size + 1]; size_t buf##_len = max_size; char *buf##_p = buf;
 #define CHECKBUF_RESET(buf, max_size) buf##_len = max_size; buf##_p = buf;
 #define CHECKBUF_APPEND(buf, src, src_len) \
-    { size_t l = MIN(src_len, buf##_len); \
-      memcpy(buf##_p, src, l); \
-      buf##_len -= l; \
-      buf##_p += l; }
+        { size_t l = MIN(src_len, buf##_len); \
+          memcpy(buf##_p, src, l); \
+          buf##_len -= l; \
+          buf##_p += l; }
 #define CHECKBUF_APPEND_0(buf) { *buf##_p = 0; }
 #define CHECKBUF_LEN(buf) (buf##_p - buf)
 
@@ -336,7 +336,6 @@ typedef const char *mp_rom_error_text_t;
 
 // Portable implementations of CLZ and CTZ intrinsics
 #ifdef _MSC_VER
-#include <intrin.h>
 
 static inline uint32_t mp_clz(uint32_t x) {
     unsigned long lz = 0;
