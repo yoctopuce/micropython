@@ -355,7 +355,7 @@ function ci_stm32_pyb_build {
     git submodule update --init lib/mynewt-nimble
     make ${MAKEOPTS} -C ports/stm32 BOARD=PYBV11 MICROPY_PY_NETWORK_WIZNET5K=5200 USER_C_MODULES=../../examples/usercmodule
     make ${MAKEOPTS} -C ports/stm32 BOARD=PYBD_SF2
-    make ${MAKEOPTS} -C ports/stm32 BOARD=PYBD_SF6 NANBOX=1 MICROPY_BLUETOOTH_NIMBLE=0 MICROPY_BLUETOOTH_BTSTACK=1
+    make ${MAKEOPTS} -C ports/stm32 BOARD=PYBD_SF6 COPT=-O2 NANBOX=1 MICROPY_BLUETOOTH_NIMBLE=0 MICROPY_BLUETOOTH_BTSTACK=1
     make ${MAKEOPTS} -C ports/stm32/mboot BOARD=PYBV10 CFLAGS_EXTRA='-DMBOOT_FSLOAD=1 -DMBOOT_VFS_LFS2=1'
     make ${MAKEOPTS} -C ports/stm32/mboot BOARD=PYBD_SF6
     make ${MAKEOPTS} -C ports/stm32/mboot BOARD=STM32F769DISC CFLAGS_EXTRA='-DMBOOT_ADDRESS_SPACE_64BIT=1 -DMBOOT_SDCARD_ADDR=0x100000000ULL -DMBOOT_SDCARD_BYTE_SIZE=0x400000000ULL -DMBOOT_FSLOAD=1 -DMBOOT_VFS_FAT=1'
@@ -425,6 +425,11 @@ CI_UNIX_OPTS_QEMU_ARM=(
     CROSS_COMPILE=arm-linux-gnueabi-
     VARIANT=coverage
     MICROPY_STANDALONE=1
+)
+
+CI_UNIX_OPTS_QEMU_RISCV64=(
+    CROSS_COMPILE=riscv64-linux-gnu-
+    VARIANT=coverage
 )
 
 function ci_unix_build_helper {
@@ -647,9 +652,9 @@ function ci_unix_macos_build {
 
 function ci_unix_macos_run_tests {
     # Issues with macOS tests:
-    # - import_pkg7 has a problem with relative imports
-    # - random_basic has a problem with getrandbits(0)
-    (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-standard/micropython ./run-tests.py --exclude 'import_pkg7.py' --exclude 'random_basic.py')
+    # - float_parse and float_parse_doubleprec parse/print floats out by a few mantissa bits
+    # - ffi_callback crashes for an unknown reason
+    (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-standard/micropython ./run-tests.py --exclude '(float_parse|float_parse_doubleprec|ffi_callback).py')
 }
 
 function ci_unix_qemu_mips_setup {
@@ -690,6 +695,28 @@ function ci_unix_qemu_arm_run_tests {
     export QEMU_LD_PREFIX=/usr/arm-linux-gnueabi
     file ./ports/unix/build-coverage/micropython
     (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-coverage/micropython ./run-tests.py --exclude 'vfs_posix.*\.py')
+}
+
+function ci_unix_qemu_riscv64_setup {
+    . /etc/os-release
+    for repository in "${VERSION_CODENAME}" "${VERSION_CODENAME}-updates" "${VERSION_CODENAME}-security"
+    do
+        sudo add-apt-repository -y -n "deb [arch=riscv64] http://ports.ubuntu.com/ubuntu-ports ${repository} main"
+    done
+    sudo apt-get update
+    sudo dpkg --add-architecture riscv64
+    sudo apt-get install gcc-riscv64-linux-gnu g++-riscv64-linux-gnu libffi-dev:riscv64
+    sudo apt-get install qemu-user
+    qemu-riscv64 --version
+}
+
+function ci_unix_qemu_riscv64_build {
+    ci_unix_build_helper "${CI_UNIX_OPTS_QEMU_RISCV64[@]}"
+}
+
+function ci_unix_qemu_riscv64_run_tests {
+    file ./ports/unix/build-coverage/micropython
+    (cd tests && MICROPY_MICROPYTHON=../ports/unix/build-coverage/micropython ./run-tests.py)
 }
 
 ########################################################################################

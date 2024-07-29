@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import sysconfig
 import platform
 import argparse
 import inspect
@@ -579,13 +580,9 @@ def run_tests(pyb, tests, args, result_dir, num_threads=1):
     if os.getenv("GITHUB_ACTIONS") == "true":
         skip_tests.add("thread/stress_schedule.py")  # has reliability issues
 
-        if os.getenv("RUNNER_OS") == "Windows":
+        if os.getenv("RUNNER_OS") == "Windows" and os.getenv("CI_BUILD_CONFIGURATION") == "Debug":
             # fails with stack overflow on Debug builds
             skip_tests.add("misc/sys_settrace_features.py")
-
-            if os.getenv("MSYSTEM") is not None:
-                # fails due to wrong path separator
-                skip_tests.add("import/import_file.py")
 
     if upy_float_precision == 0:
         skip_tests.add("extmod/uctypes_le_float.py")
@@ -711,7 +708,9 @@ def run_tests(pyb, tests, args, result_dir, num_threads=1):
 
     # Some tests use unsupported features on Windows
     if os.name == "nt":
-        skip_tests.add("import/import_file.py")  # works but CPython prints forward slashes
+        if not sysconfig.get_platform().startswith("mingw"):
+            # Works but CPython uses '\' path separator
+            skip_tests.add("import/import_file.py")
 
     # Some tests are known to fail with native emitter
     # Remove them from the below when they work
@@ -1121,7 +1120,9 @@ the last matching regex is used:
                 test_dirs += ("float", "inlineasm", "ports/renesas-ra")
             elif args.target == "rp2":
                 test_dirs += ("float", "stress", "inlineasm", "thread", "ports/rp2")
-            elif args.target in ("esp8266", "esp32", "minimal", "nrf"):
+            elif args.target == "esp32":
+                test_dirs += ("float", "thread")
+            elif args.target in ("esp8266", "minimal", "nrf"):
                 test_dirs += ("float",)
             elif args.target == "wipy":
                 # run WiPy tests

@@ -562,7 +562,12 @@ MP_NOINLINE int main_(int argc, char **argv) {
             // First entry is empty. We've already added an empty entry to sys.path, so skip it.
             ++path;
         }
-        bool path_remaining = *path;
+        // GCC targeting RISC-V 64 reports a warning about `path_remaining` being clobbered by
+        // either setjmp or vfork if that variable it is allocated on the stack.  This may
+        // probably be a compiler error as it occurs on a few recent GCC releases (up to 14.1.0)
+        // but LLVM doesn't report any warnings.
+        static bool path_remaining;
+        path_remaining = *path;
         while (path_remaining) {
             char *path_entry_end = strchr(path, PATHLIST_SEP_CHAR);
             if (path_entry_end == NULL) {
@@ -639,7 +644,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
                     return invalid_args();
                 }
                 mp_obj_t import_args[4];
-                import_args[0] = mp_obj_new_str(argv[a + 1], strlen(argv[a + 1]));
+                import_args[0] = mp_obj_new_str_from_cstr(argv[a + 1]);
                 import_args[1] = import_args[2] = mp_const_none;
                 // Ask __import__ to handle imported module specially - set its __name__
                 // to __main__, and also return this leaf module, not top-level package

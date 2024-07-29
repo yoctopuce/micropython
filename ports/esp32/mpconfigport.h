@@ -18,9 +18,8 @@
 
 // object representation and NLR handling
 #define MICROPY_OBJ_REPR                    (MICROPY_OBJ_REPR_A)
+#if !CONFIG_IDF_TARGET_ESP32C3
 #define MICROPY_NLR_SETJMP                  (1)
-#if CONFIG_IDF_TARGET_ESP32C3
-#define MICROPY_GCREGS_SETJMP               (1)
 #endif
 
 // memory allocation policies
@@ -44,6 +43,8 @@
 #define MICROPY_PERSISTENT_CODE_LOAD        (1)
 #if !CONFIG_IDF_TARGET_ESP32C3
 #define MICROPY_EMIT_XTENSAWIN              (1)
+#else
+#define MICROPY_EMIT_RV32                   (1)
 #endif
 
 // workaround for xtensa-esp32-elf-gcc esp-2020r3, which can generate wrong code for loops
@@ -136,8 +137,6 @@
 #define MICROPY_PY_MACHINE_I2C_TRANSFER_WRITE1 (1)
 #define MICROPY_PY_MACHINE_SOFTI2C          (1)
 #define MICROPY_PY_MACHINE_SPI              (1)
-#define MICROPY_PY_MACHINE_SPI_MSB          (0)
-#define MICROPY_PY_MACHINE_SPI_LSB          (1)
 #define MICROPY_PY_MACHINE_SOFTSPI          (1)
 #ifndef MICROPY_PY_MACHINE_DAC
 #define MICROPY_PY_MACHINE_DAC              (SOC_DAC_SUPPORTED)
