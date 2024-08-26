@@ -1,11 +1,10 @@
 /*
  * This file is part of the MicroPython project, http://micropython.org/
  *
- * Development of the code in this file was sponsored by Microbric Pty Ltd
- *
  * The MIT License (MIT)
  *
- * Copyright (c) 2016 Damien P. George
+ * Copyright (c) 2014 Paul Sokolovsky
+ * Copryight (c) 2024 Angus Gratton
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,27 +24,34 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#ifndef MICROPY_INCLUDED_ESP32_UART_H
-#define MICROPY_INCLUDED_ESP32_UART_H
 
-// Whether to enable the REPL on a UART.
-#ifndef MICROPY_HW_ENABLE_UART_REPL
-#define MICROPY_HW_ENABLE_UART_REPL (!CONFIG_USB_OTG_SUPPORTED && !CONFIG_ESP_CONSOLE_USB_CDC && !CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED)
-#endif
+#include "py/runtime.h"
+#include "py/cstack.h"
 
-#if MICROPY_HW_ENABLE_UART_REPL
+void mp_cstack_init_with_sp_here(size_t stack_size) {
+    #if __GNUC__ >= 13
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wdangling-pointer"
+    #endif
+    volatile int stack_dummy;
+    mp_cstack_init_with_top((void *)&stack_dummy, stack_size);
+    #if __GNUC__ >= 13
+    #pragma GCC diagnostic pop
+    #endif
+}
 
-#ifndef MICROPY_HW_UART_REPL
-#define MICROPY_HW_UART_REPL (0)
-#endif
+mp_uint_t mp_cstack_usage(void) {
+    // Assumes descending stack
+    volatile int stack_dummy;
+    return MP_STATE_THREAD(stack_top) - (char *)&stack_dummy;
+}
 
-#ifndef MICROPY_HW_UART_REPL_BAUD
-#define MICROPY_HW_UART_REPL_BAUD (115200)
-#endif
+#if MICROPY_STACK_CHECK
 
-void uart_stdout_init(void);
-int uart_stdout_tx_strn(const char *str, size_t len);
+void mp_cstack_check(void) {
+    if (mp_cstack_usage() >= MP_STATE_THREAD(stack_limit)) {
+        mp_raise_recursion_depth();
+    }
+}
 
-#endif // MICROPY_HW_ENABLE_UART_REPL
-
-#endif // MICROPY_INCLUDED_ESP32_UART_H
+#endif // MICROPY_STACK_CHECK
