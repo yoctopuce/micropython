@@ -18,7 +18,7 @@
 
 // object representation and NLR handling
 #define MICROPY_OBJ_REPR                    (MICROPY_OBJ_REPR_A)
-#if !CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ARCH_XTENSA
 #define MICROPY_NLR_SETJMP                  (1)
 #endif
 
@@ -41,10 +41,14 @@
 
 // emitters
 #define MICROPY_PERSISTENT_CODE_LOAD        (1)
-#if !CONFIG_IDF_TARGET_ESP32C3
-#define MICROPY_EMIT_XTENSAWIN              (1)
+#if CONFIG_IDF_TARGET_ARCH_RISCV
+#if CONFIG_ESP_SYSTEM_PMP_IDRAM_SPLIT
+#define MICROPY_EMIT_RV32                   (0)
 #else
 #define MICROPY_EMIT_RV32                   (1)
+#endif
+#else
+#define MICROPY_EMIT_XTENSAWIN              (1)
 #endif
 
 // optimisations
@@ -161,6 +165,8 @@
 #define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32s3"
 #elif CONFIG_IDF_TARGET_ESP32C3
 #define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32c3"
+#elif CONFIG_IDF_TARGET_ESP32C6
+#define MICROPY_PY_NETWORK_HOSTNAME_DEFAULT "mpy-esp32c6"
 #endif
 #endif
 #define MICROPY_PY_NETWORK_INCLUDEFILE      "ports/esp32/modnetwork.h"
@@ -261,8 +267,12 @@
 // type definitions for the specific machine
 
 #define MICROPY_MAKE_POINTER_CALLABLE(p) ((void *)((mp_uint_t)(p)))
+#if SOC_CPU_IDRAM_SPLIT_USING_PMP && !CONFIG_ESP_SYSTEM_PMP_IDRAM_SPLIT
+// On targets with this configuration all RAM is executable so no need for a custom commit function.
+#else
 void *esp_native_code_commit(void *, size_t, void *);
 #define MP_PLAT_COMMIT_EXEC(buf, len, reloc) esp_native_code_commit(buf, len, reloc)
+#endif
 #define MP_SSIZE_MAX (0x7fffffff)
 
 #if MICROPY_PY_SOCKET_EVENTS
@@ -364,11 +374,7 @@ void boardctrl_startup(void);
 
 #if MICROPY_PY_NETWORK_LAN && CONFIG_ETH_USE_SPI_ETHERNET
 #ifndef MICROPY_PY_NETWORK_LAN_SPI_CLOCK_SPEED_MZ
-#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32C2
-#define MICROPY_PY_NETWORK_LAN_SPI_CLOCK_SPEED_MZ       (12)
-#else
-#define MICROPY_PY_NETWORK_LAN_SPI_CLOCK_SPEED_MZ       (36)
-#endif
+#define MICROPY_PY_NETWORK_LAN_SPI_CLOCK_SPEED_MZ       (20)
 #endif
 #endif
 
