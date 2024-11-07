@@ -28,7 +28,6 @@
 #include "py/runtime.h"
 #include "py/stackctrl.h"
 #include "py/unicode.h"
-#define re1_5_stack_chk()       MP_STACK_CHECK()
 // Yoctopuce specific ^^^^^^
 
 #define nil ((void*)0)
