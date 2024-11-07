@@ -28,38 +28,12 @@
 #include "py/smallint.h"
 #include "py/pairheap.h"
 #include "py/mphal.h"
+#include "extmod/modasyncio.h"
 
 #if MICROPY_PY_ASYNCIO
 
 // Used when task cannot be guaranteed to be non-NULL.
 #define TASK_PAIRHEAP(task) ((task) ? &(task)->pairheap : NULL)
-
-#define TASK_STATE_RUNNING_NOT_WAITED_ON (mp_const_true)
-#define TASK_STATE_DONE_NOT_WAITED_ON (mp_const_none)
-#define TASK_STATE_DONE_WAS_WAITED_ON (mp_const_false)
-
-#define TASK_IS_DONE(task) ( \
-    (task)->state == TASK_STATE_DONE_NOT_WAITED_ON \
-    || (task)->state == TASK_STATE_DONE_WAS_WAITED_ON)
-
-typedef struct _mp_obj_task_t {
-    mp_pairheap_t pairheap;
-    mp_obj_t coro;
-    mp_obj_t data;
-    mp_obj_t state;
-    mp_obj_t ph_key;
-} mp_obj_task_t;
-
-typedef struct _mp_obj_task_queue_t {
-    mp_obj_base_t base;
-    mp_obj_task_t *heap;
-    #if MICROPY_PY_ASYNCIO_TASK_QUEUE_PUSH_CALLBACK
-    mp_obj_t push_callback;
-    #endif
-} mp_obj_task_queue_t;
-
-static const mp_obj_type_t task_queue_type;
-static const mp_obj_type_t task_type;
 
 static mp_obj_t task_queue_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args);
 
@@ -159,8 +133,8 @@ static const mp_rom_map_elem_t task_queue_locals_dict_table[] = {
 };
 static MP_DEFINE_CONST_DICT(task_queue_locals_dict, task_queue_locals_dict_table);
 
-static MP_DEFINE_CONST_OBJ_TYPE(
-    task_queue_type,
+MP_DEFINE_CONST_OBJ_TYPE(
+    mp_type_task_queue,
     MP_QSTR_TaskQueue,
     MP_TYPE_FLAG_NONE,
     make_new, task_queue_make_new,
@@ -185,6 +159,7 @@ static mp_obj_t task_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
     if (n_args == 2) {
         mp_asyncio_context = args[1];
     }
+    MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_NEW_TASK);
     return MP_OBJ_FROM_PTR(self);
 }
 
@@ -206,7 +181,7 @@ static mp_obj_t task_cancel(mp_obj_t self_in) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("can't cancel self"));
     }
     // If Task waits on another task then forward the cancel to the one it's waiting on.
-    while (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(self->data)), MP_OBJ_FROM_PTR(&task_type))) {
+    while (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(self->data)), MP_OBJ_FROM_PTR(&mp_type_task))) {
         self = MP_OBJ_TO_PTR(self->data);
     }
 
@@ -234,6 +209,7 @@ static mp_obj_t task_cancel(mp_obj_t self_in) {
     }
 
     self->data = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR_CancelledError));
+    MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_CANCELLED);
 
     return mp_const_true;
 }
@@ -278,8 +254,8 @@ static mp_obj_t task_getiter(mp_obj_t self_in, mp_obj_iter_buf_t *iter_buf) {
         self->state = TASK_STATE_DONE_WAS_WAITED_ON;
     } else if (self->state == TASK_STATE_RUNNING_NOT_WAITED_ON) {
         // Allocate the waiting queue.
-        self->state = task_queue_make_new(&task_queue_type, 0, 0, NULL);
-    } else if (mp_obj_get_type(self->state) != &task_queue_type) {
+        self->state = task_queue_make_new(&mp_type_task_queue, 0, 0, NULL);
+    } else if (mp_obj_get_type(self->state) != &mp_type_task_queue) {
         // Task has state used for another purpose, so can't also wait on it.
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("can't wait"));
     }
@@ -290,6 +266,7 @@ static mp_obj_t task_iternext(mp_obj_t self_in) {
     mp_obj_task_t *self = MP_OBJ_TO_PTR(self_in);
     if (TASK_IS_DONE(self)) {
         // Task finished, raise return value to caller so it can continue.
+        MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_DONE);
         nlr_raise(self->data);
     } else {
         // Put calling task on waiting queue.
@@ -307,8 +284,8 @@ static const mp_getiter_iternext_custom_t task_getiter_iternext = {
     .iternext = task_iternext,
 };
 
-static MP_DEFINE_CONST_OBJ_TYPE(
-    task_type,
+MP_DEFINE_CONST_OBJ_TYPE(
+    mp_type_task,
     MP_QSTR_Task,
     MP_TYPE_FLAG_ITER_IS_CUSTOM,
     make_new, task_make_new,
@@ -321,8 +298,8 @@ static MP_DEFINE_CONST_OBJ_TYPE(
 
 static const mp_rom_map_elem_t mp_module_asyncio_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__asyncio) },
-    { MP_ROM_QSTR(MP_QSTR_TaskQueue), MP_ROM_PTR(&task_queue_type) },
-    { MP_ROM_QSTR(MP_QSTR_Task), MP_ROM_PTR(&task_type) },
+    { MP_ROM_QSTR(MP_QSTR_TaskQueue), MP_ROM_PTR(&mp_type_task_queue) },
+    { MP_ROM_QSTR(MP_QSTR_Task), MP_ROM_PTR(&mp_type_task) },
 };
 static MP_DEFINE_CONST_DICT(mp_module_asyncio_globals, mp_module_asyncio_globals_table);
 
