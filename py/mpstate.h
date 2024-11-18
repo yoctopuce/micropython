@@ -288,10 +288,13 @@ typedef struct _mp_state_thread_t {
     // If MP_OBJ_STOP_ITERATION is propagated then this holds its argument.
     mp_obj_t stop_iteration_arg;
 
-    #if MICROPY_PY_SYS_SETTRACE
+    #if MICROPY_PY_SYS_SETTRACE == 1
     mp_obj_t prof_trace_callback;
     bool prof_callback_is_executing;
     struct _mp_code_state_t *current_code_state;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    bool prof_systrace_enabled;
+    struct _mp_code_state_t* current_code_state;
     #endif
 
     #if MICROPY_PY_SSL_MBEDTLS_NEED_ACTIVE_CONTEXT

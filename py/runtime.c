@@ -157,9 +157,12 @@ void mp_init(void) {
     MP_STATE_VM(sys_mutable[MP_SYS_MUTABLE_PS2]) = MP_OBJ_NEW_QSTR(MP_QSTR__dot__dot__dot__space_);
     #endif
 
-    #if MICROPY_PY_SYS_SETTRACE
+    #if MICROPY_PY_SYS_SETTRACE == 1
     MP_STATE_THREAD(prof_trace_callback) = MP_OBJ_NULL;
     MP_STATE_THREAD(prof_callback_is_executing) = false;
+    MP_STATE_THREAD(current_code_state) = NULL;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    MP_STATE_THREAD(prof_systrace_enabled) = false;
     MP_STATE_THREAD(current_code_state) = NULL;
     #endif
 
