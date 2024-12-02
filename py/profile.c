@@ -310,6 +310,7 @@ mp_frame_t *mp_new_frame(const mp_code_state_t* code_state) {
     }
     const mp_raw_code_t* rc = code_state->fun_bc->rc;
     const mp_bytecode_prelude_t* prelude = &rc->prelude;
+    o->startTicks = mp_hal_ticks_ms();
     o->code_state = code_state;
     o->lasti = code_state->ip - prelude->opcodes;
     o->lineno = mp_prof_bytecode_lineno(rc, o->lasti);
@@ -373,26 +374,30 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
 #if MICROPY_PY_SYS_SETTRACE == 1
     assert(!mp_prof_is_executing);
     mp_obj_frame_t *frame = MP_OBJ_TO_PTR(mp_obj_new_frame(code_state));
-#elif MICROPY_PY_SYS_SETTRACE == 2
-    mp_frame_t* frame = mp_new_frame(code_state);
-#endif
     if (frame == NULL) {
         // Couldn't allocate a frame object
         return MP_OBJ_NULL;
     }
+#elif MICROPY_PY_SYS_SETTRACE == 2
+    mp_frame_t* frame = code_state->frame;
+    if (frame == NULL) {
+        frame = mp_new_frame(code_state);
+        code_state->frame = frame;
+    }
+#endif
 
     mp_code_state_t* prev_state = code_state->prev_state;
     if (prev_state && code_state->frame == NULL) {
         // We are entering not-yet-traced frame
         // which means it's a CALL event (not a GENERATOR)
         // so set the function definition line.
-        const mp_raw_code_t *rc = code_state->fun_bc->rc;
+        const mp_raw_code_t* rc = code_state->fun_bc->rc;
         frame->lineno = rc->line_of_definition;
         if (!rc->line_of_definition) {
             frame->lineno = mp_prof_bytecode_lineno(rc, 0);
         }
         // ensure all parent code_state have a stack frame
-        while(prev_state->frame == NULL) {
+        while (prev_state->frame == NULL) {
             // Parent frames do not yet exist, create them on the fly
             mp_frame_t* prev_frame = mp_new_frame(prev_state);
             if (prev_frame == NULL) {
@@ -405,9 +410,9 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
             if (!prev_state) break;
         }
     }
-    code_state->frame = frame;
 
 #if MICROPY_PY_SYS_SETTRACE == 1
+    code_state->frame = frame;
     if (!prof_trace_cb) {
         return MP_OBJ_NULL;
     }
