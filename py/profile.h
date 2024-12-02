@@ -61,6 +61,7 @@ mp_obj_t mp_obj_new_code(const mp_module_context_t* mc, const mp_raw_code_t* rc)
 
 typedef struct _mp_frame_t {
     const mp_code_state_t* code_state;
+    mp_uint_t startTicks;
     mp_uint_t lasti;
     mp_uint_t lineno;
 } mp_frame_t;

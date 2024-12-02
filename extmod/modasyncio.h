@@ -49,7 +49,10 @@
 #endif
 #define TASK_HOOK_NEW_TASK          1
 #define TASK_HOOK_TASK_DONE         0
-#define TASK_HOOK_TASK_CANCELLED    -1
+
+// User-provided function to return a user-friendly ID for a micropython object
+// allocated on the heap (used to identify tasks in the print helper)
+s32 mpy_obj_id(mp_const_obj_t obj);
 
 typedef struct _mp_obj_task_t {
     mp_pairheap_t pairheap;
@@ -67,8 +70,28 @@ typedef struct _mp_obj_task_queue_t {
     #endif
 } mp_obj_task_queue_t;
 
+typedef struct _mp_ioqueue_entry_t {
+    union {
+        mp_obj_t as_array[2];
+        struct {
+            mp_obj_t read;
+            mp_obj_t write;
+        } _for;
+    } task_waiting;
+    mp_obj_t stream;
+} mp_ioqueue_entry_t;
+
+typedef struct _mp_obj_ioqueue_t {
+    mp_obj_base_t base;
+    mp_obj_t poller;
+    mp_uint_t alloc_items : 16;
+    mp_uint_t used_items : 16;
+    mp_ioqueue_entry_t *items;
+} mp_obj_ioqueue_t;
+
 extern const mp_obj_type_t mp_type_task_queue;
 extern const mp_obj_type_t mp_type_task;
+extern const mp_obj_type_t mp_type_ioqueue;
 
 extern mp_obj_t mp_asyncio_context;
 

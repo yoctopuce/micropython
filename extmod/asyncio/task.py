@@ -1,7 +1,7 @@
 # MicroPython asyncio module
 # MIT license; Copyright (c) 2019-2020 Damien P. George
 
-# This file contains the core TaskQueue based on a pairing heap, and the core Task class.
+# This file contains the core TaskQueue based on a pairing heap, and the core Task and IOQuete classes.
 # They can optionally be replaced by C implementations.
 
 from . import core
@@ -175,3 +175,67 @@ class Task:
             core._task_queue.push(self)
         self.data = core.CancelledError
         return True
+
+# Queue and poller for stream IO
+class IOQueue:
+    def __init__(self):
+        self.poller = select.poll()
+        self.map = {}  # maps id(stream) to [task_waiting_read, task_waiting_write, stream]
+
+    def _enqueue(self, s, idx):
+        if id(s) not in self.map:
+            entry = [None, None, s]
+            entry[idx] = cur_task
+            self.map[id(s)] = entry
+            self.poller.register(s, select.POLLIN if idx == 0 else select.POLLOUT)
+        else:
+            sm = self.map[id(s)]
+            assert sm[idx] is None
+            assert sm[1 - idx] is not None
+            sm[idx] = cur_task
+            self.poller.modify(s, select.POLLIN | select.POLLOUT)
+        # Link task to this IOQueue so it can be removed if needed
+        cur_task.data = self
+
+    def _dequeue(self, s):
+        del self.map[id(s)]
+        self.poller.unregister(s)
+
+    def queue_read(self, s):
+        self._enqueue(s, 0)
+
+    def queue_write(self, s):
+        self._enqueue(s, 1)
+
+    def remove(self, task):
+        while True:
+            del_s = None
+            for k in self.map:  # Iterate without allocating on the heap
+                q0, q1, s = self.map[k]
+                if q0 is task or q1 is task:
+                    del_s = s
+                    break
+            if del_s is not None:
+                self._dequeue(s)
+            else:
+                break
+
+    def wait_io_event(self, dt):
+        for s, ev in self.poller.ipoll(dt):
+            sm = self.map[id(s)]
+            # print('poll', s, sm, ev)
+            if ev & ~select.POLLOUT and sm[0] is not None:
+                # POLLIN or error
+                _task_queue.push(sm[0])
+                sm[0] = None
+            if ev & ~select.POLLIN and sm[1] is not None:
+                # POLLOUT or error
+                _task_queue.push(sm[1])
+                sm[1] = None
+            if sm[0] is None and sm[1] is None:
+                self._dequeue(s)
+            elif sm[0] is None:
+                self.poller.modify(s, select.POLLOUT)
+            else:
+                self.poller.modify(s, select.POLLIN)
+
