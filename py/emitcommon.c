@@ -59,6 +59,13 @@ static bool strictly_equal(mp_obj_t a, mp_obj_t b) {
     if (a_type != b_type) {
         return false;
     }
+    #if MICROPY_COMP_FLOAT_CONST
+    // only accept bit-by-bit comparison for floats, to avoid mixing up
+    // 0.0 and -0.0: they are 'equal' but nevertheless different
+    if (a_type == &mp_type_float) {
+        return false;
+    }
+    #endif
     if (a_type == &mp_type_tuple) {
         mp_obj_tuple_t *a_tuple = MP_OBJ_TO_PTR(a);
         mp_obj_tuple_t *b_tuple = MP_OBJ_TO_PTR(b);
