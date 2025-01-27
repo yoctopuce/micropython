@@ -785,8 +785,11 @@ def run_tests(pyb, tests, args, result_dir, num_threads=1):
 
     if not has_coverage:
         skip_tests.add("cmdline/cmd_parsetree.py")
+        skip_tests.add("cmdline/cmd_showbc_const_all.py")
         skip_tests.add("cmdline/repl_sys_ps1_ps2.py")
         skip_tests.add("extmod/ssl_poll.py")
+    else:
+        skip_tests.add("cmdline/cmd_showbc_const.py")
 
     # Skip thread mutation tests on targets that don't have the GIL.
     if args.platform in PC_PLATFORMS + ("rp2",):
