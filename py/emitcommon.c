@@ -31,6 +31,10 @@
 
 #if MICROPY_ENABLE_COMPILER
 
+#if MICROPY_PY_BUILTINS_FLOAT && MICROPY_COMP_FLOAT_CONST
+#include <math.h>
+#endif
+
 #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
 qstr_short_t mp_emit_common_use_qstr(mp_emit_common_t *emit, qstr qst) {
     mp_map_elem_t *elem = mp_map_lookup(&emit->qstr_map, MP_OBJ_NEW_QSTR(qst), MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
@@ -75,7 +79,7 @@ static bool strictly_equal(mp_obj_t a, mp_obj_t b) {
         if (!mp_obj_equal(a, b)) {
             return false;
         }
-        #if MICROPY_COMP_FLOAT_CONST
+        #if MICROPY_PY_BUILTINS_FLOAT && MICROPY_COMP_FLOAT_CONST
         if (a_type == &mp_type_float) {
             mp_float_t a_val = mp_obj_float_get(a);
             if (a_val == 0.0) {
