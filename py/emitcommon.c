@@ -59,13 +59,6 @@ static bool strictly_equal(mp_obj_t a, mp_obj_t b) {
     if (a_type != b_type) {
         return false;
     }
-    #if MICROPY_COMP_FLOAT_CONST
-    // only accept bit-by-bit comparison for floats, to avoid mixing up
-    // 0.0 and -0.0: they are 'equal' but nevertheless different
-    if (a_type == &mp_type_float) {
-        return false;
-    }
-    #endif
     if (a_type == &mp_type_tuple) {
         mp_obj_tuple_t *a_tuple = MP_OBJ_TO_PTR(a);
         mp_obj_tuple_t *b_tuple = MP_OBJ_TO_PTR(b);
@@ -79,7 +72,22 @@ static bool strictly_equal(mp_obj_t a, mp_obj_t b) {
         }
         return true;
     } else {
-        return mp_obj_equal(a, b);
+        if (!mp_obj_equal(a, b)) {
+            return false;
+        }
+        #if MICROPY_COMP_FLOAT_CONST
+        if (a_type == &mp_type_float) {
+            mp_float_t a_val = mp_obj_float_get(a);
+            if (a_val == 0.0) {
+                // Although 0.0 == -0.0, they are not strictly_equal and
+                // must be stored as two different constants in .mpy files
+                mp_float_t a_sign = MICROPY_FLOAT_C_FUN(copysign)(1.0, a_val);
+                mp_float_t b_sign = MICROPY_FLOAT_C_FUN(copysign)(1.0, mp_obj_float_get(b));
+                return a_sign == b_sign;
+            }
+        }
+        #endif
+        return true;
     }
 }
 

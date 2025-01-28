@@ -676,7 +676,13 @@ static MP_DEFINE_CONST_MAP(mp_constants_map, mp_constants_table);
 static bool binary_op_maybe(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs, mp_obj_t *res) {
     nlr_buf_t nlr;
     if (nlr_push(&nlr) == 0) {
-        *res = mp_binary_op(op, lhs, rhs);
+        mp_obj_t tmp = mp_binary_op(op, lhs, rhs);
+        #if MICROPY_PY_BUILTINS_COMPLEX
+        if (mp_obj_is_type(tmp, &mp_type_complex)) {
+            return false;
+        }
+        #endif
+        *res = tmp;
         nlr_pop();
         return true;
     } else {
