@@ -210,7 +210,10 @@ typedef struct _mp_state_vm_t {
     #if MICROPY_EMIT_NATIVE
     uint8_t default_emit_opt; // one of MP_EMIT_OPT_xxx
     #endif
+    #if MICROPY_COMP_PREDEFINED_CONST
+    mp_obj_t predefined_const;
     #endif
+    #endif // MICROPY_ENABLE_COMPILER
 
     // size of the emergency exception buf, if it's dynamically allocated
     #if MICROPY_ENABLE_EMERGENCY_EXCEPTION_BUF && MICROPY_EMERGENCY_EXCEPTION_BUF_SIZE == 0
@@ -294,7 +297,7 @@ typedef struct _mp_state_thread_t {
     struct _mp_code_state_t *current_code_state;
     #elif MICROPY_PY_SYS_SETTRACE == 2
     bool prof_systrace_enabled;
-    struct _mp_code_state_t* current_code_state;
+    struct _mp_code_state_t *current_code_state;
     #endif
 
     #if MICROPY_PY_SSL_MBEDTLS_NEED_ACTIVE_CONTEXT

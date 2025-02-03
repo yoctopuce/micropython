@@ -616,7 +616,7 @@ static void save_obj(mp_print_t *print, mp_obj_t o) {
         vstr_t vstr;
         mp_print_t pr;
         vstr_init_print(&vstr, 10, &pr);
-        mp_obj_print_helper(&pr, o, PRINT_REPR);
+        mp_obj_print_helper(&pr, o, PRINT_EXACT);
         mp_print_bytes(print, &obj_type, 1);
         mp_print_uint(print, vstr.len);
         mp_print_bytes(print, (const byte *)vstr.buf, vstr.len);

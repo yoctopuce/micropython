@@ -14,6 +14,7 @@
 
 // Yoctopuce specific vvvvvv
 //
+#if defined(VIRTUAL_HUB) || defined(TEXAS_API)
 // Allow compilation of re1.5 lib without explicit C file inclusion from modre.c
 #include "ydef_private.h"
 #ifndef __FILE_ID__
@@ -28,6 +29,7 @@
 #include "py/runtime.h"
 #include "py/stackctrl.h"
 #include "py/unicode.h"
+#endif
 // Yoctopuce specific ^^^^^^
 
 #define nil ((void*)0)

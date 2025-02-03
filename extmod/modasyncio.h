@@ -45,14 +45,18 @@
 
 // MICROPY_PY_ASYNCIO_TASK_HOOK support
 #ifndef MICROPY_PY_ASYNCIO_TASK_HOOK
-#define MICROPY_PY_ASYNCIO_TASK_HOOK(task,event)
+#define MICROPY_PY_ASYNCIO_TASK_HOOK(task, event)
 #endif
 #define TASK_HOOK_NEW_TASK          1
 #define TASK_HOOK_TASK_DONE         0
 
+#if !defined(VIRTUAL_HUB) && !defined(TEXAS_API)
+#define mpy_obj_id(obj) ((mp_int_t)(obj))
+#else
 // User-provided function to return a user-friendly ID for a micropython object
 // allocated on the heap (used to identify tasks in the print helper)
-s32 mpy_obj_id(mp_const_obj_t obj);
+mp_int_t mpy_obj_id(mp_const_obj_t obj);
+#endif
 
 typedef struct _mp_obj_task_t {
     mp_pairheap_t pairheap;

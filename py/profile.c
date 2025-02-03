@@ -215,18 +215,18 @@ mp_obj_t mp_obj_new_code(const mp_module_context_t *context, const mp_raw_code_t
 
 static void frame_print(const mp_print_t *print, mp_obj_t o_in, mp_print_kind_t kind) {
     (void)kind;
-    mp_obj_frame_t* frame = MP_OBJ_TO_PTR(o_in);
+    mp_obj_frame_t *frame = MP_OBJ_TO_PTR(o_in);
     mp_obj_code_t *code = frame->code;
-    const mp_module_context_t* context = code->context;
+    const mp_module_context_t *context = code->context;
     const mp_raw_code_t *rc = code->rc;
-    const mp_bytecode_prelude_t* prelude = &rc->prelude;
+    const mp_bytecode_prelude_t *prelude = &rc->prelude;
     mp_printf(print,
         "<frame at 0x%p, file '%q', line %d, code %q>",
         frame,
         QSTR_MAP(context, 0),
         frame->lineno,
         QSTR_MAP(context, prelude->qstr_block_name_idx)
-    );
+        );
 }
 
 static void frame_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
@@ -244,11 +244,11 @@ static void frame_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
                 dest[0] = MP_OBJ_FROM_PTR(o->code_state->prev_state->frame);
             }
             break;
-#if MICROPY_PY_SYS_SETTRACE == 1
+        #if MICROPY_PY_SYS_SETTRACE == 1
         case MP_QSTR_f_code:
             dest[0] = MP_OBJ_FROM_PTR(o->code);
             break;
-#endif
+        #endif
         case MP_QSTR_f_globals:
             dest[0] = MP_OBJ_FROM_PTR(o->code_state->fun_bc->context->module.globals);
             break;
@@ -283,7 +283,7 @@ mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state) {
     if (code == NULL) {
         return MP_OBJ_NULL;
     }
-    const mp_raw_code_t* rc = code->rc;
+    const mp_raw_code_t *rc = code->rc;
 
     const mp_bytecode_prelude_t *prelude = &rc->prelude;
     o->code_state = code_state;
@@ -300,16 +300,16 @@ mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state) {
 
 #elif MICROPY_PY_SYS_SETTRACE == 2
 
-mp_frame_t *mp_new_frame(const mp_code_state_t* code_state) {
+mp_frame_t *mp_new_frame(const mp_code_state_t *code_state) {
     if (gc_is_locked()) {
         return MP_OBJ_NULL;
     }
-    mp_frame_t* o = m_new_maybe(mp_frame_t,1);
+    mp_frame_t *o = m_new_maybe(mp_frame_t, 1);
     if (o == NULL) {
         return MP_OBJ_NULL;
     }
-    const mp_raw_code_t* rc = code_state->fun_bc->rc;
-    const mp_bytecode_prelude_t* prelude = &rc->prelude;
+    const mp_raw_code_t *rc = code_state->fun_bc->rc;
+    const mp_bytecode_prelude_t *prelude = &rc->prelude;
     o->startTicks = mp_hal_ticks_ms();
     o->code_state = code_state;
     o->lasti = code_state->ip - prelude->opcodes;
@@ -371,27 +371,27 @@ mp_obj_t mp_prof_settrace(mp_obj_t enable) {
 #endif
 
 mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
-#if MICROPY_PY_SYS_SETTRACE == 1
+    #if MICROPY_PY_SYS_SETTRACE == 1
     assert(!mp_prof_is_executing);
     mp_obj_frame_t *frame = MP_OBJ_TO_PTR(mp_obj_new_frame(code_state));
     if (frame == NULL) {
         // Couldn't allocate a frame object
         return MP_OBJ_NULL;
     }
-#elif MICROPY_PY_SYS_SETTRACE == 2
-    mp_frame_t* frame = code_state->frame;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    mp_frame_t *frame = code_state->frame;
     if (frame == NULL) {
         frame = mp_new_frame(code_state);
         code_state->frame = frame;
     }
-#endif
+    #endif
 
-    mp_code_state_t* prev_state = code_state->prev_state;
+    mp_code_state_t *prev_state = code_state->prev_state;
     if (prev_state && code_state->frame == NULL) {
         // We are entering not-yet-traced frame
         // which means it's a CALL event (not a GENERATOR)
         // so set the function definition line.
-        const mp_raw_code_t* rc = code_state->fun_bc->rc;
+        const mp_raw_code_t *rc = code_state->fun_bc->rc;
         frame->lineno = rc->line_of_definition;
         if (!rc->line_of_definition) {
             frame->lineno = mp_prof_bytecode_lineno(rc, 0);
@@ -399,7 +399,7 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
         // ensure all parent code_state have a stack frame
         while (prev_state->frame == NULL) {
             // Parent frames do not yet exist, create them on the fly
-            mp_frame_t* prev_frame = mp_new_frame(prev_state);
+            mp_frame_t *prev_frame = mp_new_frame(prev_state);
             if (prev_frame == NULL) {
                 // Couldn't allocate a frame object
                 break;
@@ -407,11 +407,13 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
             prev_state->frame = prev_frame;
             // ensure parent code_state has a stack frame
             prev_state = prev_state->prev_state;
-            if (!prev_state) break;
+            if (!prev_state) {
+                break;
+            }
         }
     }
 
-#if MICROPY_PY_SYS_SETTRACE == 1
+    #if MICROPY_PY_SYS_SETTRACE == 1
     code_state->frame = frame;
     if (!prof_trace_cb) {
         return MP_OBJ_NULL;
@@ -427,10 +429,10 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
     top = mp_prof_callback_invoke(prof_trace_cb, args);
 
     code_state->frame->callback = mp_obj_is_callable(top) ? top : MP_OBJ_NULL;
-#elif MICROPY_PY_SYS_SETTRACE == 2
+    #elif MICROPY_PY_SYS_SETTRACE == 2
     mp_prof_trace_cb(frame, MP_QSTR_call, mp_const_none);
     mp_obj_t top = mp_const_none;
-#endif
+    #endif
 
     // Invalidate the last executed line number so the LINE trace can trigger after this CALL.
     frame->lineno = 0;
@@ -439,24 +441,24 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
 }
 
 mp_obj_t mp_prof_frame_update(const mp_code_state_t *code_state) {
-#if MICROPY_PY_SYS_SETTRACE == 1
-    mp_obj_frame_t* frame = code_state->frame;
+    #if MICROPY_PY_SYS_SETTRACE == 1
+    mp_obj_frame_t *frame = code_state->frame;
     if (frame == NULL) {
         // Frame was not allocated (eg because there was no memory available)
         return MP_OBJ_NULL;
     }
 
-    mp_obj_frame_t* o = frame;
+    mp_obj_frame_t *o = frame;
     mp_obj_code_t *code = o->code;
     const mp_raw_code_t *rc = code->rc;
-#elif MICROPY_PY_SYS_SETTRACE == 2
+    #elif MICROPY_PY_SYS_SETTRACE == 2
     mp_frame_t *o = code_state->frame;
     if (o == NULL) {
         // Frame was not allocated (eg because there was no memory available)
         return MP_OBJ_NULL;
     }
-    const mp_raw_code_t* rc = o->code_state->fun_bc->rc;
-#endif
+    const mp_raw_code_t *rc = o->code_state->fun_bc->rc;
+    #endif
     const mp_bytecode_prelude_t *prelude = &rc->prelude;
 
     assert(o->code_state == code_state);
@@ -469,16 +471,16 @@ mp_obj_t mp_prof_frame_update(const mp_code_state_t *code_state) {
 
 mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, mp_obj_t exception_or_none) {
     // Detect execution recursion
-#if MICROPY_PY_SYS_SETTRACE == 1
+    #if MICROPY_PY_SYS_SETTRACE == 1
     assert(!mp_prof_is_executing);
     assert(code_state->frame);
     assert(mp_obj_get_type(code_state->frame) == &mp_type_frame);
-#endif
+    #endif
 
     // Detect data recursion
     assert(code_state != code_state->prev_state);
 
-#if MICROPY_PY_SYS_SETTRACE == 1
+    #if MICROPY_PY_SYS_SETTRACE == 1
     mp_obj_t top = mp_const_none;
     mp_obj_t callback = code_state->frame->callback;
 
@@ -525,7 +527,7 @@ mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, mp_obj_t exception_or_n
     }
 
     return top;
-#elif MICROPY_PY_SYS_SETTRACE == 2
+    #elif MICROPY_PY_SYS_SETTRACE == 2
     // Call event's are handled inside mp_prof_frame_enter
 
     // SETTRACE event EXCEPTION
@@ -535,8 +537,8 @@ mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, mp_obj_t exception_or_n
     }
 
     // SETTRACE event LINE
-    const mp_raw_code_t* rc = code_state->fun_bc->rc;
-    const mp_bytecode_prelude_t* prelude = &rc->prelude;
+    const mp_raw_code_t *rc = code_state->fun_bc->rc;
+    const mp_bytecode_prelude_t *prelude = &rc->prelude;
     size_t prev_line_no = code_state->frame->lineno;
     size_t current_line_no = mp_prof_bytecode_lineno(rc, code_state->ip - prelude->opcodes);
     if (prev_line_no != current_line_no) {
@@ -545,13 +547,13 @@ mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, mp_obj_t exception_or_n
     }
 
     // SETTRACE event RETURN
-    const byte* ip = code_state->ip;
+    const byte *ip = code_state->ip;
     if (*ip == MP_BC_RETURN_VALUE || *ip == MP_BC_YIELD_VALUE) {
         mp_prof_trace_cb(code_state->frame, MP_QSTR_return, mp_const_none);
     }
 
     return mp_const_none;
-#endif
+    #endif
 }
 
 /******************************************************************************/

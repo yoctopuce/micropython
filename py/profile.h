@@ -46,28 +46,28 @@ typedef struct _mp_obj_code_t {
 
 typedef struct _mp_obj_frame_t {
     mp_obj_base_t base;
-    const mp_code_state_t* code_state;
-    struct _mp_obj_frame_t* back;
+    const mp_code_state_t *code_state;
+    struct _mp_obj_frame_t *back;
     mp_obj_t callback;
-    mp_obj_code_t* code;
+    mp_obj_code_t *code;
     mp_uint_t lasti;
     mp_uint_t lineno;
     bool trace_opcodes;
 } mp_obj_frame_t;
 
-mp_obj_t mp_obj_new_code(const mp_module_context_t* mc, const mp_raw_code_t* rc);
+mp_obj_t mp_obj_new_code(const mp_module_context_t *mc, const mp_raw_code_t *rc);
 
 #elif MICROPY_PY_SYS_SETTRACE == 2
 
 typedef struct _mp_frame_t {
-    const mp_code_state_t* code_state;
+    const mp_code_state_t *code_state;
     mp_uint_t startTicks;
     mp_uint_t lasti;
     mp_uint_t lineno;
 } mp_frame_t;
 
 // this function must be provided by the debugger implementation in C
-void* mp_prof_trace_cb(const mp_frame_t* frame, qstr event_qstr, void* arg);
+void *mp_prof_trace_cb(const mp_frame_t *frame, qstr event_qstr, void *arg);
 
 #endif
 
@@ -76,7 +76,7 @@ void mp_prof_extract_prelude(const byte *bytecode, mp_bytecode_prelude_t *prelud
 #if MICROPY_PY_SYS_SETTRACE == 1
 mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state);
 #elif MICROPY_PY_SYS_SETTRACE == 2
-mp_frame_t* mp_new_frame(const mp_code_state_t* code_state);
+mp_frame_t *mp_new_frame(const mp_code_state_t *code_state);
 #endif
 
 // This is the implementation for the sys.settrace

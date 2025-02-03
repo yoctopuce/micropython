@@ -477,7 +477,7 @@ MP_REGISTER_EXTENSIBLE_MODULE(MP_QSTR_re, mp_module_re);
 // Yoctopuce specific vvvvvv
 //
 // Include C files explicitely in projects and makefile
-#if 0
+#if !defined(VIRTUAL_HUB) && !defined(TEXAS_API)
 // Source files #include'd here to make sure they're compiled in
 // only if module is enabled by config setting.
 

@@ -101,7 +101,10 @@ void mp_init(void) {
     #if MICROPY_EMIT_NATIVE
     MP_STATE_VM(default_emit_opt) = MP_EMIT_OPT_NONE;
     #endif
+    #if MICROPY_COMP_PREDEFINED_CONST
+    MP_STATE_VM(predefined_const) = mp_const_none;
     #endif
+    #endif // MICROPY_ENABLE_COMPILER
 
     // init global module dict
     mp_obj_dict_init(&MP_STATE_VM(mp_loaded_modules_dict), MICROPY_LOADED_MODULES_DICT_SIZE);

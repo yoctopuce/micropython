@@ -165,10 +165,9 @@ static mp_obj_t task_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
     return MP_OBJ_FROM_PTR(self);
 }
 
-static void task_print(const mp_print_t* print, mp_obj_t self_in, mp_print_kind_t kind)
-{
-    mp_obj_task_t* self = MP_OBJ_TO_PTR(self_in);
-    const char* state;
+static void task_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
+    mp_obj_task_t *self = MP_OBJ_TO_PTR(self_in);
+    const char *state;
     (void)kind;
 
     if (TASK_IS_DONE(self)) {
@@ -312,7 +311,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
     MP_QSTR_Task,
     MP_TYPE_FLAG_ITER_IS_CUSTOM,
     make_new, task_make_new,
-    print,task_print,
+    print, task_print,
     attr, task_attr,
     iter, &task_getiter_iternext
     );
@@ -320,9 +319,9 @@ MP_DEFINE_CONST_OBJ_TYPE(
 /******************************************************************************/
 // IOQueue class
 
-static mp_obj_t ioqueue_make_new(const mp_obj_type_t* type, size_t n_args, size_t n_kw, const mp_obj_t* args) {    
+static mp_obj_t ioqueue_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     mp_arg_check_num(n_args, n_kw, 0, 0, false);
-    mp_obj_ioqueue_t* self = m_new_obj(mp_obj_ioqueue_t);
+    mp_obj_ioqueue_t *self = m_new_obj(mp_obj_ioqueue_t);
     mp_uint_t alloc_items = 8;
     self->base.type = type;
     self->poller = mp_select_poll();
@@ -333,13 +332,13 @@ static mp_obj_t ioqueue_make_new(const mp_obj_type_t* type, size_t n_args, size_
 }
 
 static void ioqueue_enqueue(mp_obj_t self_in, mp_obj_t stream, mp_uint_t idx) {
-    mp_obj_ioqueue_t* self = MP_OBJ_TO_PTR(self_in);
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
     mp_uint_t used_items = self->used_items;
     mp_uint_t alloc_items = self->alloc_items;
-    mp_ioqueue_entry_t* end = self->items + used_items;
-    mp_ioqueue_entry_t* scan = self->items;
-    mp_ioqueue_entry_t* emptyEntry = NULL;
-    mp_obj_t* cur_task;
+    mp_ioqueue_entry_t *end = self->items + used_items;
+    mp_ioqueue_entry_t *scan = self->items;
+    mp_ioqueue_entry_t *emptyEntry = NULL;
+    mp_obj_t *cur_task;
 
     cur_task = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR_cur_task));
     while (scan < end && scan->stream != stream) {
@@ -363,7 +362,7 @@ static void ioqueue_enqueue(mp_obj_t self_in, mp_obj_t stream, mp_uint_t idx) {
         }
         scan->stream = stream;
         scan->task_waiting.as_array[idx] = cur_task;
-        scan->task_waiting.as_array[1-idx] = mp_const_none;
+        scan->task_waiting.as_array[1 - idx] = mp_const_none;
         mp_obj_t args[3];
         args[0] = self->poller;
         args[1] = stream;
@@ -373,10 +372,10 @@ static void ioqueue_enqueue(mp_obj_t self_in, mp_obj_t stream, mp_uint_t idx) {
         assert(scan->task_waiting.as_array[idx] == mp_const_none);
         assert(scan->task_waiting.as_array[1 - idx] != mp_const_none);
         scan->task_waiting.as_array[idx] = cur_task;
-        mp_poll_modify(self->poller, stream, MP_OBJ_NEW_SMALL_INT(MP_STREAM_POLL_RD|MP_STREAM_POLL_WR));
+        mp_poll_modify(self->poller, stream, MP_OBJ_NEW_SMALL_INT(MP_STREAM_POLL_RD | MP_STREAM_POLL_WR));
     }
     // Link task to this IOQueue so it can be removed if needed
-    mp_obj_task_t* cur_task_ptr = MP_OBJ_TO_PTR(cur_task);
+    mp_obj_task_t *cur_task_ptr = MP_OBJ_TO_PTR(cur_task);
     cur_task_ptr->data = self_in;
 }
 
@@ -394,10 +393,10 @@ static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_queue_write_obj, ioqueue_queue_write);
 
 // dequeue a stream
 static mp_obj_t ioqueue_dequeue(mp_obj_t self_in, mp_obj_t stream) {
-    mp_obj_ioqueue_t* self = MP_OBJ_TO_PTR(self_in);
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
     mp_uint_t used_items = self->used_items;
-    mp_ioqueue_entry_t* end = self->items + used_items;
-    mp_ioqueue_entry_t* scan = self->items;
+    mp_ioqueue_entry_t *end = self->items + used_items;
+    mp_ioqueue_entry_t *scan = self->items;
 
     while (scan < end && scan->stream != stream) {
         scan++;
@@ -418,8 +417,8 @@ static mp_obj_t ioqueue_dequeue(mp_obj_t self_in, mp_obj_t stream) {
 static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_dequeue_obj, ioqueue_dequeue);
 
 // update poll status or remove entry from ioqueue after dequeuing a task
-static void ioqueue_dequeue_ifneeded(mp_obj_t self_in, mp_ioqueue_entry_t* scan) {
-    mp_obj_ioqueue_t* self = MP_OBJ_TO_PTR(self_in);
+static void ioqueue_dequeue_ifneeded(mp_obj_t self_in, mp_ioqueue_entry_t *scan) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
     mp_obj_t poller = self->poller;
     mp_obj_t stream = scan->stream;
 
@@ -446,8 +445,8 @@ static void ioqueue_dequeue_ifneeded(mp_obj_t self_in, mp_ioqueue_entry_t* scan)
 }
 
 static mp_obj_t ioqueue_remove(mp_obj_t self_in, mp_obj_t task) {
-    mp_obj_ioqueue_t* self = MP_OBJ_TO_PTR(self_in);
-    mp_ioqueue_entry_t* scan = self->items;
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_ioqueue_entry_t *scan = self->items;
 
     while (scan < self->items + self->used_items) {
         if (scan->stream) {
@@ -471,7 +470,7 @@ static mp_obj_t ioqueue_remove(mp_obj_t self_in, mp_obj_t task) {
 static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_remove_obj, ioqueue_remove);
 
 static mp_obj_t ioqueue_wait_io_event(mp_obj_t self_in, mp_obj_t dt) {
-    mp_obj_ioqueue_t* self = MP_OBJ_TO_PTR(self_in);
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
     mp_obj_t poller = self->poller;
     mp_obj_t args[2];
     mp_obj_t tuple;
@@ -482,11 +481,11 @@ static mp_obj_t ioqueue_wait_io_event(mp_obj_t self_in, mp_obj_t dt) {
     args[0] = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR__task_queue));
     tuple = mp_poll_iternext(poller);
     while (tuple != MP_OBJ_STOP_ITERATION) {
-        mp_obj_tuple_t* t = MP_OBJ_TO_PTR(tuple);
+        mp_obj_tuple_t *t = MP_OBJ_TO_PTR(tuple);
         mp_obj_t stream = t->items[0];
         mp_uint_t flags = mp_obj_get_int(t->items[1]);
-        mp_ioqueue_entry_t* end = self->items + self->used_items;
-        mp_ioqueue_entry_t* scan = self->items;
+        mp_ioqueue_entry_t *end = self->items + self->used_items;
+        mp_ioqueue_entry_t *scan = self->items;
         while (scan < end && scan->stream != stream) {
             scan++;
         }
@@ -510,8 +509,8 @@ static mp_obj_t ioqueue_wait_io_event(mp_obj_t self_in, mp_obj_t dt) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_wait_io_event_obj, ioqueue_wait_io_event);
 
-static void ioqueue_attr(mp_obj_t self_in, qstr attr, mp_obj_t* dest) {
-    mp_obj_ioqueue_t* self = MP_OBJ_TO_PTR(self_in);
+static void ioqueue_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
     if (dest[0] == MP_OBJ_NULL) {
         // Load
         if (attr == MP_QSTR_poller) {
@@ -519,16 +518,14 @@ static void ioqueue_attr(mp_obj_t self_in, qstr attr, mp_obj_t* dest) {
             // install returned by select.poll to be used
             dest[0] = self->poller;
         } else if (attr == MP_QSTR_map) {
-            // map is a valid attribute, which should evaluate 
+            // map is a valid attribute, which should evaluate
             // to True iff there is a task pending I/O
             dest[0] = (self->used_items ? mp_const_true : mp_const_false);
-        }
-        else {
+        } else {
             // not an attribute, trigger lookup in locals_dict
             dest[1] = MP_OBJ_SENTINEL;
         }
-    }
-    else if (dest[1] != MP_OBJ_NULL) {
+    } else if (dest[1] != MP_OBJ_NULL) {
         // Store
         if (attr == MP_QSTR_poller) {
             // success
@@ -554,7 +551,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
     make_new, ioqueue_make_new,
     attr, ioqueue_attr,
     locals_dict, &ioqueue_locals_dict
-);
+    );
 
 /******************************************************************************/
 // C-level asyncio module

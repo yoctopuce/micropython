@@ -70,19 +70,27 @@
     <CustomPropsFile Condition="'$(CustomPropsFile)'==''">msvc/user.props</CustomPropsFile>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <Import Project="$(PyMsvcDir)sources.props" />
