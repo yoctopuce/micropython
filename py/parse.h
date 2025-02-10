@@ -93,9 +93,7 @@ static inline mp_obj_t mp_parse_node_extract_const_object(mp_parse_node_struct_t
 
 bool mp_parse_node_is_const_false(mp_parse_node_t pn);
 bool mp_parse_node_is_const_true(mp_parse_node_t pn);
-#if MICROPY_EMIT_INLINE_ASM
 bool mp_parse_node_get_int_maybe(mp_parse_node_t pn, mp_obj_t *o);
-#endif
 size_t mp_parse_node_extract_list(mp_parse_node_t *pn, size_t pn_kind, mp_parse_node_t **nodes);
 void mp_parse_node_print(const mp_print_t *print, mp_parse_node_t pn, size_t indent);
 

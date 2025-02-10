@@ -351,7 +351,6 @@ static uint8_t peek_rule(parser_t *parser, size_t n) {
 #endif
 
 #if MICROPY_COMP_FLOAT_CONST
-
 static bool mp_parse_node_get_number_maybe(mp_parse_node_t pn, mp_obj_t *o) {
     if (MP_PARSE_NODE_IS_SMALL_INT(pn)) {
         *o = MP_OBJ_NEW_SMALL_INT(MP_PARSE_NODE_LEAF_SMALL_INT(pn));
@@ -364,16 +363,12 @@ static bool mp_parse_node_get_number_maybe(mp_parse_node_t pn, mp_obj_t *o) {
         return false;
     }
 }
-
-#if MICROPY_EMIT_INLINE_ASM
 bool mp_parse_node_get_int_maybe(mp_parse_node_t pn, mp_obj_t *o) {
     if (!mp_parse_node_get_number_maybe(pn, o)) {
         return false;
     }
     return mp_obj_is_int(*o);
 }
-#endif
-
 #else
 bool mp_parse_node_get_int_maybe(mp_parse_node_t pn, mp_obj_t *o) {
     if (MP_PARSE_NODE_IS_SMALL_INT(pn)) {
@@ -842,15 +837,15 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
         mp_parse_node_t pn = peek_result(parser, 0);
         mp_token_kind_t tok = MP_PARSE_NODE_LEAF_ARG(peek_result(parser, 1));
         mp_unary_op_t op;
-        if (!mp_parse_node_get_number_maybe(pn, &arg0)) {
-            return false;
-        }
         if (tok == MP_TOKEN_OP_TILDE) {
-            if (!mp_obj_is_int(arg0)) {
+            if (!mp_parse_node_get_int_maybe(pn, &arg0)) {
                 return false;
             }
             op = MP_UNARY_OP_INVERT;
         } else {
+            if (!mp_parse_node_get_number_maybe(pn, &arg0)) {
+                return false;
+            }
             assert(tok == MP_TOKEN_OP_PLUS || tok == MP_TOKEN_OP_MINUS); // should be
             op = MP_UNARY_OP_POSITIVE + (tok - MP_TOKEN_OP_PLUS);
         }
@@ -929,7 +924,7 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
         return false;
     #endif
 
-    #if MICROPY_COMP_SYSNAME_CONST || MICROPY_COMP_MODULE_CONST || MICROPY_COMP_CONST_MEMBERS
+    #if MICROPY_COMP_MODULE_CONST || MICROPY_COMP_SYSNAME_CONST || MICROPY_COMP_CONST_MEMBERS
     } else if (rule_id == RULE_atom_expr_normal) {
         mp_parse_node_t pn0 = peek_result(parser, 1);
         mp_parse_node_t pn1 = peek_result(parser, 0);
@@ -1214,7 +1209,7 @@ static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id,
 #if MICROPY_COMP_PREDEFINED_CONST
 mp_parse_tree_t mp_parse_ex(mp_lexer_t *lex, mp_parse_input_kind_t input_kind, mp_obj_t *new_const_dict)
 #else
-mp_parse_tree_t mp_parse(mp_lexer_t * lex, mp_parse_input_kind_t input_kind)
+mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind)
 #endif
 {
     // Set exception handler to free the lexer if an exception is raised.
@@ -1248,8 +1243,8 @@ mp_parse_tree_t mp_parse(mp_lexer_t * lex, mp_parse_input_kind_t input_kind)
         size_t i, n = map->alloc;
         for (i = 0; i < n; i++) {
             if (mp_map_slot_is_filled(map, i)) {
-                mp_map_elem_t* predef = &map->table[i];
-                mp_map_elem_t* elem = mp_map_lookup(&parser.consts, predef->key, MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
+                mp_map_elem_t *predef = &map->table[i];
+                mp_map_elem_t *elem = mp_map_lookup(&parser.consts, predef->key, MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
                 if (mp_obj_is_dict_or_ordereddict(predef->value)) {
                     elem->value = mp_obj_dict_copy(predef->value);
                 } else {
@@ -1385,8 +1380,10 @@ mp_parse_tree_t mp_parse(mp_lexer_t * lex, mp_parse_input_kind_t input_kind)
 
                 // matched the rule, so now build the corresponding parse_node
 
-                #if !MICROPY_ENABLE_DOC_STRING
-                // this code discards lonely statements, such as doc strings
+                #if !MICROPY_ENABLE_DOC_STRING && !MICROPY_COMP_ADD_METADATA
+                // This code discards lonely statements, such as doc strings, to reclaim memory early.
+                // Doc strings will be discarded at compilation anyway if not enabled, but if we need
+                // to save meta-data in mpy files, we want to preserve the module initial doc string
                 if (input_kind != MP_PARSE_SINGLE_INPUT && rule_id == RULE_expr_stmt && peek_result(&parser, 0) == MP_PARSE_NODE_NULL) {
                     mp_parse_node_t p = peek_result(&parser, 1);
                     if ((MP_PARSE_NODE_IS_LEAF(p) && !MP_PARSE_NODE_IS_ID(p))
@@ -1396,6 +1393,18 @@ mp_parse_tree_t mp_parse(mp_lexer_t * lex, mp_parse_input_kind_t input_kind)
                         // Pushing the "pass" rule here will overwrite any RULE_const_object
                         // entry that was on the result stack, allowing the GC to reclaim
                         // the memory from the const object when needed.
+                        push_result_rule(&parser, rule_src_line, RULE_pass_stmt, 0);
+                        break;
+                    }
+                }
+                #endif
+
+                #if MICROPY_COMP_DROP_FUTURE_IMPORT
+                if (rule_id == RULE_import_from) {
+                    mp_parse_node_t p = peek_result(&parser, 1);
+                    if (MP_PARSE_NODE_IS_ID(p) && MP_PARSE_NODE_LEAF_ARG(p) == MP_QSTR___future__) {
+                        pop_result(&parser); // import_as_name
+                        pop_result(&parser); // id(__future__)
                         push_result_rule(&parser, rule_src_line, RULE_pass_stmt, 0);
                         break;
                     }

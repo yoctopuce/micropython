@@ -286,7 +286,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
                     for (char *p = argv[a] + 1; *p && *p == 'O'; p++, MP_STATE_VM(mp_optimise_value)++) {;
                     }
                 }
-                #if MICROPY_COMP_PREDEFINED_CONST
+            #if MICROPY_COMP_PREDEFINED_CONST
             } else if (argv[a][1] == 'D' || argv[a][1] == 'I') {
                 bool is_file = (argv[a][1] == 'I');
                 const char *argptr = argv[a] + 2;
@@ -315,7 +315,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
                     exit(1);
                 }
                 vstr_clear(&vstr);
-                #endif
+            #endif
             } else if (strcmp(argv[a], "-o") == 0) {
                 if (a + 1 >= argc) {
                     exit(usage(argv));

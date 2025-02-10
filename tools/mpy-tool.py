@@ -27,6 +27,7 @@
 # Python 2/3 compatibility code
 from __future__ import print_function
 import platform
+import json
 
 if platform.python_version_tuple()[0] == "2":
     from binascii import hexlify as hexlify_py2
@@ -561,6 +562,7 @@ class CompiledModule:
         mpy_source_file,
         mpy_segments,
         header,
+        meta_data,
         qstr_table,
         obj_table,
         raw_code,
@@ -573,6 +575,7 @@ class CompiledModule:
         self.mpy_segments = mpy_segments
         self.source_file = qstr_table[0]
         self.header = header
+        self.meta_data = meta_data
         self.qstr_table = qstr_table
         self.obj_table = obj_table
         self.raw_code = raw_code
@@ -650,6 +653,10 @@ class CompiledModule:
         print("mpy_source_file:", self.mpy_source_file)
         print("source_file:", self.source_file.str)
         print("header:", hexlify_to_str(self.header))
+        if self.meta_data:
+            print("meta_data:")
+            for key, value in self.meta_data.items():
+                print("- %s: %s" % (key, repr(value)))
         print("qstr_table[%u]:" % len(self.qstr_table))
         for q in self.qstr_table:
             print("    %s" % q.str)
@@ -663,6 +670,10 @@ class CompiledModule:
         print("// - original source file: %s" % self.mpy_source_file)
         print("// - frozen file name: %s" % self.source_file.str)
         print("// - .mpy header: %s" % ":".join("%02x" % b for b in self.header))
+        if self.meta_data:
+            print("// - meta data:")
+            for key, value in self.meta_data.items():
+                print("//     %s: %s" % (key, repr(value)))
         print()
 
         self.raw_code.freeze()
@@ -1209,6 +1220,20 @@ class MPYReader:
         return i
 
 
+def read_meta(reader, segments):
+    metadata_len = reader.read_uint()
+    start_pos = reader.tell()
+    metastr = str_cons(reader.read_bytes(metadata_len), "utf8")
+    reader.read_byte()  # read and discard null terminator
+    segments.append(MPYSegment(MPYSegment.META, metastr, start_pos, reader.tell()))
+    try:
+        meta_data = json.loads(metastr)
+    except json.decoder.JSONDecodeError:
+        meta_data = { 'not_JSON': metastr }
+    except json.decoder.UnicodeError:
+        meta_data = { 'not_Unicode': metastr }
+    return meta_data
+
 def read_qstr(reader, segments):
     start_pos = reader.tell()
     ln = reader.read_uint()
@@ -1366,7 +1391,10 @@ def read_mpy(filename):
                 config.native_arch = mpy_native_arch
             elif config.native_arch != mpy_native_arch:
                 raise MPYReadError(filename, "native architecture mismatch")
-        config.mp_small_int_bits = header[3]
+        config.mp_small_int_bits = header[3] & 0x7f
+        meta_data = {}
+        if header[3] & 0x80:
+            meta_data = read_meta(reader, segments)
 
         # Read number of qstrs, and number of objects.
         n_qstr = reader.read_uint()
@@ -1396,6 +1424,7 @@ def read_mpy(filename):
         filename,
         segments,
         header,
+        meta_data,
         qstr_table,
         obj_table,
         raw_code,

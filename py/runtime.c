@@ -1539,6 +1539,11 @@ mp_obj_t mp_import_name(qstr name, mp_obj_t fromlist, mp_obj_t level) {
     return mp_builtin___import__(5, args);
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 mp_obj_t mp_import_from(mp_obj_t module, qstr name) {
     DEBUG_printf("import from %p %s\n", module, qstr_str(name));
 
@@ -1586,6 +1591,10 @@ mp_obj_t mp_import_from(mp_obj_t module, qstr name) {
 
     #endif
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 void mp_import_all(mp_obj_t module) {
     DEBUG_printf("import all %p\n", module);

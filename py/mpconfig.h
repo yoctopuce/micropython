@@ -476,6 +476,11 @@
 #define MICROPY_COMP_CONST_LITERAL (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to handle sys.implementation.name as a compile time constant
+#ifndef MICROPY_COMP_SYSNAME_CONST
+#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to enable lookup of constants in modules; eg module.CONST
 #ifndef MICROPY_COMP_MODULE_CONST
 #define MICROPY_COMP_MODULE_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
@@ -489,11 +494,6 @@
 // Whether to enable float module constants lookup and folding; eg const(-math.inf)
 #ifndef MICROPY_COMP_FLOAT_CONST
 #define MICROPY_COMP_FLOAT_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
-#endif
-
-// Whether to handle sys.implementation.name as a compile time constant
-#ifndef MICROPY_COMP_SYSNAME_CONST
-#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 // Whether to enable class constants; class MyClass: FLAG = const(1)
@@ -522,6 +522,16 @@
 // Costs about 80 bytes (Thumb2) and saves 2 bytes of bytecode for each use
 #ifndef MICROPY_COMP_RETURN_IF_EXPR
 #define MICROPY_COMP_RETURN_IF_EXPR (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether to parse module docstring to add metadata to .mpy files
+#ifndef MICROPY_COMP_ADD_METADATA
+#define MICROPY_COMP_ADD_METADATA (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to prune __future__ imports at compile time
+#ifndef MICROPY_COMP_DROP_FUTURE_IMPORT
+#define MICROPY_COMP_DROP_FUTURE_IMPORT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 /*****************************************************************************/

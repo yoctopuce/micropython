@@ -233,6 +233,10 @@ static mp_obj_t re_search(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(re_search_obj, 2, 4, re_search);
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 static mp_obj_t re_split(size_t n_args, const mp_obj_t *args) {
     mp_obj_re_t *self = MP_OBJ_TO_PTR(args[0]);
     Subject subj;

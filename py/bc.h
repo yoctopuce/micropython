@@ -217,6 +217,9 @@ typedef struct _mp_compiled_module_t {
     mp_module_context_t *context;
     const struct _mp_raw_code_t *rc;
     #if MICROPY_PERSISTENT_CODE_SAVE
+    #if MICROPY_COMP_ADD_METADATA
+    vstr_t meta_vstr;
+    #endif
     bool has_native;
     size_t n_qstr;
     size_t n_obj;
