@@ -1609,6 +1609,7 @@ static void emit_native_load_subscr(emit_t *emit) {
                         #elif N_XTENSA || N_XTENSAWIN
                         if (index_value > 0 && index_value < 256) {
                             asm_xtensa_l32i_optimised(emit->as, REG_RET, reg_base, index_value);
+                            break;
                         }
                         #endif
                         need_reg_single(emit, reg_index, 0);
@@ -1887,6 +1888,7 @@ static void emit_native_store_subscr(emit_t *emit) {
                         #elif N_XTENSA || N_XTENSAWIN
                         if (index_value > 0 && index_value < 256) {
                             asm_xtensa_s32i_optimised(emit->as, REG_RET, reg_base, index_value);
+                            break;
                         }
                         #elif N_ARM
                         ASM_MOV_REG_IMM(emit->as, reg_index, index_value);
@@ -2541,7 +2543,7 @@ static void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
             #if N_X64
             asm_x64_xor_r64_r64(emit->as, REG_RET, REG_RET);
             asm_x64_cmp_r64_with_r64(emit->as, reg_rhs, REG_ARG_2);
-            static byte ops[6 + 6] = {
+            static const byte ops[6 + 6] = {
                 // unsigned
                 ASM_X64_CC_JB,
                 ASM_X64_CC_JA,
@@ -2561,7 +2563,7 @@ static void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
             #elif N_X86
             asm_x86_xor_r32_r32(emit->as, REG_RET, REG_RET);
             asm_x86_cmp_r32_with_r32(emit->as, reg_rhs, REG_ARG_2);
-            static byte ops[6 + 6] = {
+            static const byte ops[6 + 6] = {
                 // unsigned
                 ASM_X86_CC_JB,
                 ASM_X86_CC_JA,
@@ -2581,7 +2583,7 @@ static void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
             #elif N_THUMB
             asm_thumb_cmp_rlo_rlo(emit->as, REG_ARG_2, reg_rhs);
             if (asm_thumb_allow_armv7m(emit->as)) {
-                static uint16_t ops[6 + 6] = {
+                static const uint16_t ops[6 + 6] = {
                     // unsigned
                     ASM_THUMB_OP_ITE_CC,
                     ASM_THUMB_OP_ITE_HI,
@@ -2601,7 +2603,7 @@ static void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
                 asm_thumb_mov_rlo_i8(emit->as, REG_RET, 1);
                 asm_thumb_mov_rlo_i8(emit->as, REG_RET, 0);
             } else {
-                static uint16_t ops[6 + 6] = {
+                static const uint16_t ops[6 + 6] = {
                     // unsigned
                     ASM_THUMB_CC_CC,
                     ASM_THUMB_CC_HI,
@@ -2624,7 +2626,7 @@ static void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
             }
             #elif N_ARM
             asm_arm_cmp_reg_reg(emit->as, REG_ARG_2, reg_rhs);
-            static uint ccs[6 + 6] = {
+            static const uint ccs[6 + 6] = {
                 // unsigned
                 ASM_ARM_CC_CC,
                 ASM_ARM_CC_HI,
@@ -2642,7 +2644,7 @@ static void emit_native_binary_op(emit_t *emit, mp_binary_op_t op) {
             };
             asm_arm_setcc_reg(emit->as, REG_RET, ccs[op_idx]);
             #elif N_XTENSA || N_XTENSAWIN
-            static uint8_t ccs[6 + 6] = {
+            static const uint8_t ccs[6 + 6] = {
                 // unsigned
                 ASM_XTENSA_CC_LTU,
                 0x80 | ASM_XTENSA_CC_LTU, // for GTU we'll swap args
