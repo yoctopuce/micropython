@@ -28,21 +28,13 @@
 #define MICROPY_INCLUDED_PY_PROFILING_H
 
 #include "py/emitglue.h"
+#include "py/objcode.h"
 
 #if MICROPY_PY_SYS_SETTRACE
 
 #if MICROPY_PY_SYS_SETTRACE == 1
 
 #define mp_prof_is_executing MP_STATE_THREAD(prof_callback_is_executing)
-
-typedef struct _mp_obj_code_t {
-    // TODO this was 4 words
-    mp_obj_base_t base;
-    const mp_module_context_t *context;
-    const mp_raw_code_t *rc;
-    mp_obj_dict_t *dict_locals;
-    mp_obj_t lnotab;
-} mp_obj_code_t;
 
 typedef struct _mp_obj_frame_t {
     mp_obj_base_t base;

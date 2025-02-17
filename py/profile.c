@@ -45,7 +45,7 @@
 
 #define QSTR_MAP(context, idx) (context->constants.qstr_table[idx])
 
-static uint mp_prof_bytecode_lineno(const mp_raw_code_t *rc, size_t bc) {
+uint mp_prof_bytecode_lineno(const mp_raw_code_t *rc, size_t bc) {
     const mp_bytecode_prelude_t *prelude = &rc->prelude;
     return mp_bytecode_get_source_line(prelude->line_info, prelude->line_info_top, bc);
 }
@@ -279,7 +279,7 @@ mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state) {
         return MP_OBJ_NULL;
     }
 
-    mp_obj_code_t *code = o->code = MP_OBJ_TO_PTR(mp_obj_new_code(code_state->fun_bc->context, code_state->fun_bc->rc));
+    mp_obj_code_t *code = o->code = MP_OBJ_TO_PTR(mp_obj_new_code(code_state->fun_bc->context, code_state->fun_bc->rc, false));
     if (code == NULL) {
         return MP_OBJ_NULL;
     }
