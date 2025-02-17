@@ -49,6 +49,7 @@
 #endif
 #define TASK_HOOK_NEW_TASK          1
 #define TASK_HOOK_TASK_DONE         0
+#define TASK_HOOK_TASK_CANCELLED    -1
 
 #if !defined(VIRTUAL_HUB) && !defined(TEXAS_API)
 #define mpy_obj_id(obj) ((mp_int_t)(obj))
@@ -60,9 +61,9 @@ mp_int_t mpy_obj_id(mp_const_obj_t obj);
 
 typedef struct _mp_obj_task_t {
     mp_pairheap_t pairheap;
-    mp_obj_t coro;
-    mp_obj_t data;
-    mp_obj_t state;
+    mp_obj_t coro;              // Coroutine of this Task
+    mp_obj_t data;              // General data for queue it is waiting on
+    mp_obj_t state;             // None, False, True, a callable, or a TaskQueue instance
     mp_obj_t ph_key;
 } mp_obj_task_t;
 

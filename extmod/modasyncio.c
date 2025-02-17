@@ -78,6 +78,13 @@ static mp_obj_t task_queue_make_new(const mp_obj_type_t *type, size_t n_args, si
     return MP_OBJ_FROM_PTR(self);
 }
 
+static void task_queue_print(const mp_print_t* print, mp_obj_t self_in, mp_print_kind_t kind) {
+    mp_obj_task_t* self = MP_OBJ_TO_PTR(self_in);
+    (void)kind;
+
+    mp_printf(print, "<task queue %d>", mpy_obj_id(self_in));
+}
+
 static mp_obj_t task_queue_peek(mp_obj_t self_in) {
     mp_obj_task_queue_t *self = MP_OBJ_TO_PTR(self_in);
     if (self->heap == NULL) {
@@ -140,6 +147,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
     MP_QSTR_TaskQueue,
     MP_TYPE_FLAG_NONE,
     make_new, task_queue_make_new,
+    print, task_queue_print,
     locals_dict, &task_queue_locals_dict
     );
 
@@ -199,8 +207,10 @@ static mp_obj_t task_cancel(mp_obj_t self_in) {
     }
     // If Task waits on another task then forward the cancel to the one it's waiting on.
     while (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(self->data)), MP_OBJ_FROM_PTR(&mp_type_task))) {
+        MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_CANCELLED);
         self = MP_OBJ_TO_PTR(self->data);
     }
+    MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_CANCELLED);
 
     mp_obj_t _task_queue = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR__task_queue));
 

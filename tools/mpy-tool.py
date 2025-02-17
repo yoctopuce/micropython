@@ -583,6 +583,12 @@ class CompiledModule:
         self.obj_table_file_offset = obj_table_file_offset
         self.raw_code_file_offset = raw_code_file_offset
         self.escaped_name = escaped_name
+        module_name = self.source_file.str
+        if module_name.endswith("/__init__.py"):
+            self.short_name = module_name[: -len("/__init__.py")]
+        else:
+            self.short_name = module_name[: -len(".py")]
+
 
     def hexdump(self):
         with open(self.mpy_source_file, "rb") as f:
@@ -1590,12 +1596,7 @@ def freeze_mpy(firmware_qstr_idents, compiled_modules):
     print()
     print("#ifdef MICROPY_FROZEN_LIST_ITEM")
     for cm in compiled_modules:
-        module_name = cm.source_file.str
-        if module_name.endswith("/__init__.py"):
-            short_name = module_name[: -len("/__init__.py")]
-        else:
-            short_name = module_name[: -len(".py")]
-        print('MICROPY_FROZEN_LIST_ITEM("%s", "%s")' % (short_name, module_name))
+        print('MICROPY_FROZEN_LIST_ITEM("%s", "%s")' % (cm.short_name, cm.source_file.str))
     print("#endif")
 
     print()
@@ -1806,6 +1807,9 @@ def main():
     cmd_parser.add_argument(
         "-d", "--disassemble", action="store_true", help="output disassembled contents of files"
     )
+    cmd_parser.add_argument(
+        "-i", "--info", action="store_true", help="output the .mpy file meta-data information"
+    )
     cmd_parser.add_argument("-f", "--freeze", action="store_true", help="freeze files")
     cmd_parser.add_argument(
         "--merge", action="store_true", help="merge multiple .mpy files into one"
@@ -1866,6 +1870,12 @@ def main():
         if args.hexdump:
             print()
         disassemble_mpy(compiled_modules)
+
+    if args.info:
+        all_meta = dict()
+        for mod in compiled_modules:
+            all_meta[mod.short_name] = mod.meta_data
+        print(json.dumps(all_meta,indent=2))
 
     if args.freeze:
         try:
