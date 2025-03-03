@@ -459,6 +459,11 @@
 #define MICROPY_COMP_CONST_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable relational comparison folding; eg prune statements like if _DEBUG_LEVEL > 3
+#ifndef MICROPY_COMP_COMPAR_FOLDING
+#define MICROPY_COMP_COMPAR_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to compile constant tuples immediately to their respective objects; eg (1, True)
 // Otherwise the tuple will be built at runtime
 #ifndef MICROPY_COMP_CONST_TUPLE
@@ -468,6 +473,11 @@
 // Whether to enable optimisations for constant literals, eg OrderedDict
 #ifndef MICROPY_COMP_CONST_LITERAL
 #define MICROPY_COMP_CONST_LITERAL (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to handle sys.implementation.name as a compile time constant
+#ifndef MICROPY_COMP_SYSNAME_CONST
+#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 // Whether to enable lookup of constants in modules; eg module.CONST
