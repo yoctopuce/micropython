@@ -1,0 +1,152 @@
+File cmdline/cmd_showbc_const_all.py, code block '<module>' (descriptor: \.\+, bytecode @\.\+ 182 bytes)
+Raw bytecode (code_info_size=44, bytecode_size=138):
+ 2c 54 01 60 2c 46 22 65 27 4a 83 0e 20 27 40 20
+ 27 20 27 40 40 40 20 47 20 27 24 40 60 40 24 27
+ 47 24 27 67 40 20 47 60 20 67 20 60 80 10 02 2a
+ 01 1b 03 1c 02 16 02 59 80 51 1b 04 16 04 48 0f
+ 11 04 13 05 59 11 09 10 06 34 01 59 11 0a 65 57
+ 11 0b df 44 43 59 4a 01 5d 11 09 10 07 34 01 59
+ 11 09 10 07 34 01 59 11 09 10 07 34 01 59 11 09
+ 10 07 34 01 59 11 09 10 07 34 01 59 42 42 42 35
+ 23 00 16 0c 11 0c 23 00 d9 44 47 11 09 10 07 34
+ 01 59 23 00 16 0d 11 0d 23 00 d9 44 47 11 09 10
+ 07 34 01 59 11 09 10 07 34 01 59 11 09 10 07 34
+ 01 59 42 40 51 63
+arg names:
+(N_STATE 6)
+(N_EXC_STACK 1)
+  bc=0 line=1
+  bc=0 line=4
+  bc=12 line=5
+  bc=18 line=7
+  bc=20 line=8
+  bc=25 line=11
+  bc=32 line=12
+  bc=42 line=14
+  bc=45 line=28
+  bc=45 line=29
+  bc=52 line=30
+  bc=52 line=32
+  bc=52 line=33
+  bc=59 line=34
+  bc=59 line=35
+  bc=66 line=36
+  bc=66 line=38
+  bc=66 line=40
+  bc=66 line=42
+  bc=66 line=43
+  bc=73 line=45
+  bc=73 line=46
+  bc=80 line=47
+  bc=84 line=48
+  bc=84 line=50
+  bc=84 line=53
+  bc=84 line=55
+  bc=88 line=56
+  bc=95 line=57
+  bc=102 line=59
+  bc=106 line=60
+  bc=113 line=61
+  bc=120 line=64
+  bc=120 line=66
+  bc=120 line=67
+  bc=127 line=69
+  bc=127 line=72
+  bc=127 line=73
+  bc=134 line=76
+  bc=134 line=77
+  bc=134 line=80
+00 LOAD_CONST_SMALL_INT 0
+01 LOAD_CONST_STRING 'const'
+03 BUILD_TUPLE 1
+05 IMPORT_NAME 'micropython'
+07 IMPORT_FROM 'const'
+09 STORE_NAME const
+11 POP_TOP
+12 LOAD_CONST_SMALL_INT 0
+13 LOAD_CONST_NONE
+14 IMPORT_NAME 'sys'
+16 STORE_NAME sys
+18 SETUP_EXCEPT 35
+20 LOAD_NAME sys
+22 LOAD_ATTR settrace
+24 POP_TOP
+25 LOAD_NAME print
+27 LOAD_CONST_STRING 'SKIP'
+29 CALL_FUNCTION n=1 nkw=0
+31 POP_TOP
+32 LOAD_NAME SystemExit
+34 RAISE_OBJ
+35 DUP_TOP
+36 LOAD_NAME AttributeError
+38 BINARY_OP 8 
+39 POP_JUMP_IF_FALSE 44
+41 POP_TOP
+42 POP_EXCEPT_JUMP 45
+44 END_FINALLY
+45 LOAD_NAME print
+47 LOAD_CONST_STRING 'Kept'
+49 CALL_FUNCTION n=1 nkw=0
+51 POP_TOP
+52 LOAD_NAME print
+54 LOAD_CONST_STRING 'Kept'
+56 CALL_FUNCTION n=1 nkw=0
+58 POP_TOP
+59 LOAD_NAME print
+61 LOAD_CONST_STRING 'Kept'
+63 CALL_FUNCTION n=1 nkw=0
+65 POP_TOP
+66 LOAD_NAME print
+68 LOAD_CONST_STRING 'Kept'
+70 CALL_FUNCTION n=1 nkw=0
+72 POP_TOP
+73 LOAD_NAME print
+75 LOAD_CONST_STRING 'Kept'
+77 CALL_FUNCTION n=1 nkw=0
+79 POP_TOP
+80 JUMP 84
+82 JUMP 73
+84 LOAD_CONST_OBJ \.\+='foo'
+86 STORE_NAME a
+88 LOAD_NAME a
+90 LOAD_CONST_OBJ \.\+='foo'
+92 BINARY_OP 2 __eq__
+93 POP_JUMP_IF_FALSE 102
+95 LOAD_NAME print
+97 LOAD_CONST_STRING 'Kept'
+99 CALL_FUNCTION n=1 nkw=0
+101 POP_TOP
+102 LOAD_CONST_OBJ \.\+='foo'
+104 STORE_NAME b
+106 LOAD_NAME b
+108 LOAD_CONST_OBJ \.\+='foo'
+110 BINARY_OP 2 __eq__
+111 POP_JUMP_IF_FALSE 120
+113 LOAD_NAME print
+115 LOAD_CONST_STRING 'Kept'
+117 CALL_FUNCTION n=1 nkw=0
+119 POP_TOP
+120 LOAD_NAME print
+122 LOAD_CONST_STRING 'Kept'
+124 CALL_FUNCTION n=1 nkw=0
+126 POP_TOP
+127 LOAD_NAME print
+129 LOAD_CONST_STRING 'Kept'
+131 CALL_FUNCTION n=1 nkw=0
+133 POP_TOP
+134 JUMP 136
+136 LOAD_CONST_NONE
+137 RETURN_VALUE
+Kept
+Kept
+Kept
+Kept
+Kept
+Kept
+Kept
+Kept
+Kept
+mem: total=\\d\+, current=\\d\+, peak=\\d\+
+stack: \\d\+ out of \\d\+
+GC: total: \\d\+, used: \\d\+, free: \\d\+
+ No. of 1-blocks: \\d\+, 2-blocks: \\d\+, max blk sz: \\d\+, max free sz: \\d\+

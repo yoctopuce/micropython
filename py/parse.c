@@ -891,32 +891,65 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
         return false;
     #endif
 
-    #if MICROPY_COMP_MODULE_CONST
+    #if MICROPY_COMP_MODULE_CONST || MICROPY_COMP_SYSNAME_CONST
     } else if (rule_id == RULE_atom_expr_normal) {
         mp_parse_node_t pn0 = peek_result(parser, 1);
         mp_parse_node_t pn1 = peek_result(parser, 0);
-        if (!(MP_PARSE_NODE_IS_ID(pn0)
-              && MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_trailer_period))) {
+        if (!MP_PARSE_NODE_IS_ID(pn0)) {
             return false;
         }
-        // id1.id2
-        // look it up in constant table, see if it can be replaced with an integer
-        mp_parse_node_struct_t *pns1 = (mp_parse_node_struct_t *)pn1;
-        assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
-        qstr q_base = MP_PARSE_NODE_LEAF_ARG(pn0);
-        qstr q_attr = MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]);
-        mp_map_elem_t *elem = mp_map_lookup((mp_map_t *)&mp_constants_map, MP_OBJ_NEW_QSTR(q_base), MP_MAP_LOOKUP);
-        if (elem == NULL) {
+        #if MICROPY_COMP_SYSNAME_CONST
+        if (MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_atom_expr_trailers)) {
+            mp_parse_node_struct_t *pns = (mp_parse_node_struct_t *)pn1;
+            if (MP_PARSE_NODE_LEAF_ARG(pn0) != MP_QSTR_sys ||
+                MP_PARSE_NODE_STRUCT_NUM_NODES(pns) != 2 ||
+                !MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], RULE_trailer_period) ||
+                !MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[1], RULE_trailer_period)) {
+                return false;
+            }
+            mp_parse_node_struct_t *pns0 = (mp_parse_node_struct_t *)(pns->nodes[0]);
+            mp_parse_node_struct_t *pns1 = (mp_parse_node_struct_t *)(pns->nodes[1]);
+            assert(MP_PARSE_NODE_IS_ID(pns0->nodes[0]));
+            assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
+            if (MP_PARSE_NODE_LEAF_ARG(pns0->nodes[0]) != MP_QSTR_implementation ||
+                MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]) != MP_QSTR_name) {
+                return false;
+            }
+            for (size_t i = num_args; i > 0; i--) {
+                pop_result(parser);
+            }
+            push_result_node(parser, mp_parse_node_new_leaf(MP_PARSE_NODE_STRING, MP_QSTR_micropython));
+            return true;
+        }
+        #endif
+        if (MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_trailer_period)) {
+            // id1.id2
+            // look it up in constant table, see if it can be replaced with an integer or a float
+            mp_parse_node_struct_t *pns1 = (mp_parse_node_struct_t *)pn1;
+            assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
+            qstr q_base = MP_PARSE_NODE_LEAF_ARG(pn0);
+            qstr q_attr = MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]);
+            mp_map_elem_t *elem = NULL;
+            arg0 = MP_OBJ_NULL;
+            #if MICROPY_COMP_MODULE_CONST
+            // look it up in modules constant table, see if it can be replaced with a constant
+            elem = mp_map_lookup((mp_map_t *)&mp_constants_map, MP_OBJ_NEW_QSTR(q_base), MP_MAP_LOOKUP);
+            if (elem != NULL) {
+                mp_obj_t dest[2];
+                mp_load_method_maybe(elem->value, q_attr, dest);
+                if (!(dest[0] != MP_OBJ_NULL && (mp_obj_is_int(dest[0]) || mp_obj_is_float(dest[0])) && dest[1] == MP_OBJ_NULL)) {
+                    return false;
+                }
+                arg0 = dest[0];
+            }
+            #endif
+            if (elem == NULL) {
+                return false;
+            }
+        } else {
             return false;
         }
-        mp_obj_t dest[2];
-        mp_load_method_maybe(elem->value, q_attr, dest);
-        if (!(dest[0] != MP_OBJ_NULL && (mp_obj_is_int(dest[0]) || mp_obj_is_float(dest[0])) && dest[1] == MP_OBJ_NULL)) {
-            return false;
-        }
-        arg0 = dest[0];
     #endif
-
     } else {
         return false;
     }
@@ -932,6 +965,58 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
 }
 
 #endif // MICROPY_COMP_CONST_FOLDING
+
+#if MICROPY_COMP_COMPAR_FOLDING
+
+static bool fold_comparisons(parser_t *parser, uint8_t rule_id, size_t *num_args) {
+    // this code does folding of relational comparisons between const values
+    // in case of chained comparisons, folding starts from the right until no more foldable
+    if (rule_id != RULE_comparison) {
+        return false;
+    }
+    mp_parse_node_t pn = peek_result(parser, 0);
+    if (!mp_parse_node_is_const(pn)) {
+        return false;
+    }
+    mp_obj_t lhs, rhs = mp_parse_node_convert_to_obj(pn);
+    while (*num_args >= 3) {
+        pn = peek_result(parser, 2);
+        if (!mp_parse_node_is_const(pn)) {
+            return false;
+        }
+        lhs = mp_parse_node_convert_to_obj(pn);
+        mp_token_kind_t tok = MP_PARSE_NODE_LEAF_ARG(peek_result(parser, 1));
+        if (tok < MP_TOKEN_OP_LESS || tok > MP_TOKEN_OP_NOT_EQUAL) {
+            return false;
+        }
+        mp_binary_op_t op = MP_BINARY_OP_LESS + (tok - MP_TOKEN_OP_LESS);
+        mp_obj_t res;
+        if (!binary_op_maybe(op, lhs, rhs, &res)) {
+            return false;
+        }
+        if (res == mp_const_false) {
+            // one comparison failed => the chain is false
+            for (size_t i = *num_args; i > 0; i--) {
+                pop_result(parser);
+            }
+            push_result_node(parser, mp_parse_node_new_leaf(MP_PARSE_NODE_TOKEN, MP_TOKEN_KW_FALSE));
+            return true;
+        }
+        // comparison successful, reduce chain
+        rhs = lhs;
+        pop_result(parser);
+        pop_result(parser);
+        *num_args -= 2;
+    }
+    // chain fully reduced => relational comparison is true
+    assert(*num_args == 1);
+    pop_result(parser);
+    push_result_node(parser, mp_parse_node_new_leaf(MP_PARSE_NODE_TOKEN, MP_TOKEN_KW_TRUE));
+
+    return true;
+}
+
+#endif // MICROPY_COMP_COMPAR_FOLDING
 
 #if MICROPY_COMP_CONST_TUPLE
 static bool build_tuple_from_stack(parser_t *parser, size_t src_line, size_t num_args) {
@@ -1037,6 +1122,13 @@ static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id,
         return;
     }
     if (fold_constants(parser, rule_id, num_args)) {
+        // we folded this rule so return straight away
+        return;
+    }
+    #endif
+
+    #if MICROPY_COMP_COMPAR_FOLDING
+    if (fold_comparisons(parser, rule_id, &num_args)) {
         // we folded this rule so return straight away
         return;
     }
