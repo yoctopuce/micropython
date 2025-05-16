@@ -265,6 +265,11 @@ static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
     #endif
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 // Convert a relative (to the current module) import, going up "level" levels,
 // into an absolute import.
 static void evaluate_relative_import(mp_int_t level, const char **module_name, size_t *module_name_len) {
@@ -344,6 +349,10 @@ static void evaluate_relative_import(mp_int_t level, const char **module_name, s
     *module_name = qstr_str(new_mod_q);
     *module_name_len = new_module_name_len;
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 typedef struct _nlr_jump_callback_node_unregister_module_t {
     nlr_jump_callback_node_t callback;

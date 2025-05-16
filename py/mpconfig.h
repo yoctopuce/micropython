@@ -85,8 +85,14 @@
 // Enable everything (e.g. coverage)
 #define MICROPY_CONFIG_ROM_LEVEL_EVERYTHING (50)
 
-#ifdef MP_CONFIGFILE
+#if defined(MP_CONFIGFILE)
 #include MP_CONFIGFILE
+#elif defined(VIRTUAL_HUB) || defined(TEXAS_API)
+// Yoctopuce specific vvvvvv
+//
+// Use a specific filename for our setting file, to avoid confusion with the multiple mpconfig files in mpy tree
+#include <mpylink/ympconfig.h>
+// Yoctopuce specific ^^^^^^
 #else
 #include <mpconfigport.h>
 #endif
@@ -459,6 +465,11 @@
 #define MICROPY_COMP_CONST_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable relational comparison folding; eg prune statements like if _DEBUG_LEVEL > 3
+#ifndef MICROPY_COMP_COMPAR_FOLDING
+#define MICROPY_COMP_COMPAR_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to compile constant tuples immediately to their respective objects; eg (1, True)
 // Otherwise the tuple will be built at runtime
 #ifndef MICROPY_COMP_CONST_TUPLE
@@ -470,6 +481,11 @@
 #define MICROPY_COMP_CONST_LITERAL (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to handle sys.implementation.name as a compile time constant
+#ifndef MICROPY_COMP_SYSNAME_CONST
+#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to enable lookup of constants in modules; eg module.CONST
 #ifndef MICROPY_COMP_MODULE_CONST
 #define MICROPY_COMP_MODULE_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
@@ -478,6 +494,21 @@
 // Whether to enable constant optimisation; id = const(value)
 #ifndef MICROPY_COMP_CONST
 #define MICROPY_COMP_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to enable float module constants lookup and folding; eg const(-math.inf)
+#ifndef MICROPY_COMP_FLOAT_CONST
+#define MICROPY_COMP_FLOAT_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to enable class constants; class MyClass: FLAG = const(1)
+#ifndef MICROPY_COMP_CONST_MEMBERS
+#define MICROPY_COMP_CONST_MEMBERS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to enable preloading compile-time constants from an include file
+#ifndef MICROPY_COMP_PREDEFINED_CONST
+#define MICROPY_COMP_PREDEFINED_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 // Whether to enable optimisation of: a, b = c, d
@@ -496,6 +527,16 @@
 // Costs about 80 bytes (Thumb2) and saves 2 bytes of bytecode for each use
 #ifndef MICROPY_COMP_RETURN_IF_EXPR
 #define MICROPY_COMP_RETURN_IF_EXPR (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether to parse module docstring to add metadata to .mpy files
+#ifndef MICROPY_COMP_ADD_METADATA
+#define MICROPY_COMP_ADD_METADATA (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to prune __future__ imports at compile time
+#ifndef MICROPY_COMP_DROP_FUTURE_IMPORT
+#define MICROPY_COMP_DROP_FUTURE_IMPORT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 /*****************************************************************************/
@@ -1168,6 +1209,11 @@ typedef double mp_float_t;
 #define MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
+// Whether to support memoryview.cast method
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
 // Whether to support set object
 #ifndef MICROPY_PY_BUILTINS_SET
 #define MICROPY_PY_BUILTINS_SET (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
@@ -1528,6 +1574,11 @@ typedef double mp_float_t;
 // Whether to provide "sys.exit" function
 #ifndef MICROPY_PY_SYS_EXIT
 #define MICROPY_PY_SYS_EXIT (1)
+#endif
+
+// Whether to provide "sys.run" function (Yoctopuce extension)
+#ifndef MICROPY_PY_SYS_RUN
+#define MICROPY_PY_SYS_RUN (0)
 #endif
 
 // Whether to provide "sys.atexit" function (MicroPython extension)
