@@ -83,30 +83,30 @@ The :class:`network.WLAN` class in the :mod:`network` module::
 
     import network
 
-    wlan = network.WLAN(network.WLAN.IF_STA) # create station interface
-    wlan.active(True)       # activate the interface
-    wlan.scan()             # scan for access points
-    wlan.isconnected()      # check if the station is connected to an AP
+    wlan = network.WLAN()       # create station interface (the default, see below for an access point interface)
+    wlan.active(True)           # activate the interface
+    wlan.scan()                 # scan for access points
+    wlan.isconnected()          # check if the station is connected to an AP
     wlan.connect('ssid', 'key') # connect to an AP
-    wlan.config('mac')      # get the interface's MAC address
-    wlan.ipconfig('addr4')  # get the interface's IPv4 addresses
+    wlan.config('mac')          # get the interface's MAC address
+    wlan.ipconfig('addr4')      # get the interface's IPv4 addresses
 
     ap = network.WLAN(network.WLAN.IF_AP) # create access-point interface
-    ap.config(ssid='ESP-AP') # set the SSID of the access point
-    ap.config(max_clients=10) # set how many clients can connect to the network
-    ap.active(True)         # activate the interface
+    ap.config(ssid='ESP-AP')              # set the SSID of the access point
+    ap.config(max_clients=10)             # set how many clients can connect to the network
+    ap.active(True)                       # activate the interface
 
 A useful function for connecting to your local WiFi network is::
 
     def do_connect():
-        import network
-        wlan = network.WLAN(network.WLAN.IF_STA)
+        import machine, network
+        wlan = network.WLAN()
         wlan.active(True)
         if not wlan.isconnected():
             print('connecting to network...')
             wlan.connect('ssid', 'key')
             while not wlan.isconnected():
-                pass
+                machine.idle()
         print('network config:', wlan.ipconfig('addr4'))
 
 Once the network is established the :mod:`socket <socket>` module can be used
@@ -383,7 +383,7 @@ for more details.
 
 Use the :ref:`machine.PWM <machine.PWM>` class::
 
-    from machine import Pin, PWM
+    from machine import Pin, PWM, lightsleep
 
     pwm0 = PWM(Pin(0), freq=5000, duty_u16=32768) # create PWM object from a pin
     freq = pwm0.freq()         # get current frequency
@@ -393,7 +393,7 @@ Use the :ref:`machine.PWM <machine.PWM>` class::
     pwm0.duty(256)             # set duty cycle from 0 to 1023 as a ratio duty/1023, (now 25%)
 
     duty_u16 = pwm0.duty_u16() # get current duty cycle, range 0-65535
-    pwm0.duty_u16(2**16*3//4)  # set duty cycle from 0 to 65535 as a ratio duty_u16/65535, (now 75%)
+    pwm0.duty_u16(65536*3//4)  # set duty cycle from 0 to 65535 as a ratio duty_u16/65535, (now 75%)
 
     duty_ns = pwm0.duty_ns()   # get current pulse width in ns
     pwm0.duty_ns(250_000)      # set pulse width in nanoseconds from 0 to 1_000_000_000/freq, (now 25%)
@@ -402,19 +402,35 @@ Use the :ref:`machine.PWM <machine.PWM>` class::
 
     pwm2 = PWM(Pin(2), freq=20000, duty=512)  # create and configure in one go
     print(pwm2)                               # view PWM settings
+    pwm2.deinit()                             # turn off PWM on the pin
+
+    pwm0 = PWM(Pin(0), duty_u16=16384)            # The output is at a high level 25% of the time.
+    pwm2 = PWM(Pin(2), duty_u16=16384, invert=1)  # The output is at a low level 25% of the time.
+
+    pwm4 = PWM(Pin(4), lightsleep=True)           # Allow PWM during light sleep mode
+
+    lightsleep(10*1000) # pwm0, pwm2 goes off, pwm4 stays on during 10s light sleep
+                        # pwm0, pwm2, pwm4 on after 10s light sleep
 
 ESP chips have different hardware peripherals:
 
-=====================================================  ========  ========  ========
-Hardware specification                                    ESP32  ESP32-S2  ESP32-C3
------------------------------------------------------  --------  --------  --------
-Number of groups (speed modes)                                2         1         1
-Number of timers per group                                    4         4         4
-Number of channels per group                                  8         8         6
------------------------------------------------------  --------  --------  --------
-Different PWM frequencies (groups * timers)                   8         4         4
-Total PWM channels (Pins, duties) (groups * channels)        16         8         6
-=====================================================  ========  ========  ========
+=======================================================  ========  =========  ==========
+Hardware specification                                      ESP32  ESP32-S2,  ESP32-C2,
+                                                                   ESP32-S3,  ESP32-C3,
+                                                                   ESP32-P4   ESP32-C5,
+                                                                              ESP32-C6,
+                                                                              ESP32-H2
+-------------------------------------------------------  --------  ---------  ----------
+Number of groups (speed modes)                                  2          1         1
+Number of timers per group                                      4          4         4
+Number of channels per group                                    8          8         6
+-------------------------------------------------------  --------  ---------  ----------
+Different PWM frequencies = (groups * timers)                   8          4         4
+Total PWM channels (Pins, duties) = (groups * channels)        16          8         6
+=======================================================  ========  =========  ==========
+
+In light sleep, the ESP32 PWM can only operate in low speed mode, so only 4 timers and
+8 channels are available.
 
 A maximum number of PWM channels (Pins) are available on the ESP32 - 16 channels,
 but only 8 different PWM frequencies are available, the remaining 8 channels must
@@ -747,7 +763,7 @@ See :ref:`machine.SDCard <machine.SDCard>`. ::
 
     import machine, os, vfs
 
-    # Slot 2 uses pins sck=18, cs=5, miso=19, mosi=23
+    # On original ESP32, slot 2 uses pins sck=18, cs=5, miso=19, mosi=23
     sd = machine.SDCard(slot=2)
     vfs.mount(sd, '/sd') # mount
 

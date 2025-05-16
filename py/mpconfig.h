@@ -30,7 +30,7 @@
 // as well as a fallback to generate MICROPY_GIT_TAG if the git repo or tags
 // are unavailable.
 #define MICROPY_VERSION_MAJOR 1
-#define MICROPY_VERSION_MINOR 25
+#define MICROPY_VERSION_MINOR 26
 #define MICROPY_VERSION_MICRO 0
 #define MICROPY_VERSION_PRERELEASE 1
 
@@ -1047,6 +1047,11 @@ typedef double mp_float_t;
 #define MICROPY_VFS_WRITABLE (1)
 #endif
 
+// Whether to enable the mp_vfs_rom_ioctl C function, and vfs.rom_ioctl Python function
+#ifndef MICROPY_VFS_ROM_IOCTL
+#define MICROPY_VFS_ROM_IOCTL (MICROPY_VFS_ROM)
+#endif
+
 // Support for VFS POSIX component, to mount a POSIX filesystem within VFS
 #ifndef MICROPY_VFS_POSIX
 #define MICROPY_VFS_POSIX (0)
@@ -1251,7 +1256,7 @@ typedef double mp_float_t;
 
 // Support for calling next() with second argument
 #ifndef MICROPY_PY_BUILTINS_NEXT2
-#define MICROPY_PY_BUILTINS_NEXT2 (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#define MICROPY_PY_BUILTINS_NEXT2 (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_BASIC_FEATURES)
 #endif
 
 // Whether to support rounding of integers (incl bignum); eg round(123,-1)=120
@@ -1505,7 +1510,7 @@ typedef double mp_float_t;
 
 // Whether to provide "io.IOBase" class to support user streams
 #ifndef MICROPY_PY_IO_IOBASE
-#define MICROPY_PY_IO_IOBASE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#define MICROPY_PY_IO_IOBASE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
 // Whether to provide "io.BytesIO" class
@@ -2151,8 +2156,12 @@ typedef double mp_float_t;
 #endif // INT_FMT
 
 // Modifier for function which doesn't return
-#ifndef NORETURN
-#define NORETURN __attribute__((noreturn))
+#ifndef MP_NORETURN
+#define MP_NORETURN __attribute__((noreturn))
+#endif
+
+#if !MICROPY_PREVIEW_VERSION_2
+#define NORETURN MP_NORETURN
 #endif
 
 // Modifier for weak functions

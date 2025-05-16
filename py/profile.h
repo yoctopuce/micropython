@@ -47,6 +47,9 @@ typedef struct _mp_obj_frame_t {
     bool trace_opcodes;
 } mp_obj_frame_t;
 
+uint mp_prof_bytecode_lineno(const mp_raw_code_t *rc, size_t bc);
+void mp_prof_extract_prelude(const byte *bytecode, mp_bytecode_prelude_t *prelude);
+
 mp_obj_t mp_obj_new_code(const mp_module_context_t *mc, const mp_raw_code_t *rc);
 
 #elif MICROPY_PY_SYS_SETTRACE == 2

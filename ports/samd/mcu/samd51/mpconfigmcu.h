@@ -1,4 +1,4 @@
-// Deinitions common to all SAMD51 boards
+// Definitions common to all SAMD51 boards
 #include "samd51.h"
 
 #define MICROPY_CONFIG_ROM_LEVEL        (MICROPY_CONFIG_ROM_LEVEL_FULL_FEATURES)
@@ -23,7 +23,7 @@ unsigned long trng_random_u32(void);
 #define MICROPY_FATFS_MAX_SS                (4096)
 #define MICROPY_FATFS_LFN_CODE_PAGE         437 /* 1=SFN/ANSI 437=LFN/U.S.(OEM) */
 
-#define VFS_BLOCK_SIZE_BYTES            (1536) //
+#define VFS_BLOCK_SIZE_BYTES            (2048) //
 
 #ifndef MICROPY_HW_UART_TXBUF
 #define MICROPY_HW_UART_TXBUF           (1)

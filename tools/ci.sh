@@ -22,6 +22,15 @@ function ci_gcc_riscv_setup {
     riscv64-unknown-elf-gcc --version
 }
 
+function ci_picotool_setup {
+    # Manually installing picotool ensures we use a release version, and speeds up the build.
+    git clone https://github.com/raspberrypi/pico-sdk.git
+    (cd pico-sdk && git submodule update --init lib/mbedtls)
+    git clone https://github.com/raspberrypi/picotool.git
+    (cd picotool && mkdir build && cd build && cmake -DPICO_SDK_PATH=../../pico-sdk .. && make && sudo make install)
+    picotool version
+}
+
 ########################################################################################
 # c code formatting
 
@@ -62,6 +71,7 @@ function ci_code_size_setup {
     gcc --version
     ci_gcc_arm_setup
     ci_gcc_riscv_setup
+    ci_picotool_setup
 }
 
 function ci_code_size_build {
@@ -106,17 +116,31 @@ function ci_code_size_build {
 # .mpy file format
 
 function ci_mpy_format_setup {
+    sudo apt-get update
+    sudo apt-get install python2.7
     sudo pip3 install pyelftools
+    python2.7 --version
+    python3 --version
 }
 
 function ci_mpy_format_test {
     # Test mpy-tool.py dump feature on bytecode
-    python2 ./tools/mpy-tool.py -xd tests/frozen/frozentest.mpy
+    python2.7 ./tools/mpy-tool.py -xd tests/frozen/frozentest.mpy
     python3 ./tools/mpy-tool.py -xd tests/frozen/frozentest.mpy
+
+    # Build MicroPython
+    ci_unix_standard_build
+    micropython=./ports/unix/build-standard/micropython
+    $micropython -m mip install --target . argparse __future__
+    export MICROPYPATH=.
+
+    # Test mpy-tool.py running under MicroPython
+    $micropython ./tools/mpy-tool.py -x -d tests/frozen/frozentest.mpy
 
     # Test mpy-tool.py dump feature on native code
     make -C examples/natmod/features1
     ./tools/mpy-tool.py -xd examples/natmod/features1/features1.mpy
+    $micropython ./tools/mpy-tool.py -x -d examples/natmod/features1/features1.mpy
 }
 
 ########################################################################################
@@ -135,17 +159,22 @@ function ci_cc3200_build {
 # ports/esp32
 
 # GitHub tag of ESP-IDF to use for CI (note: must be a tag or a branch)
-IDF_VER=v5.2.2
+IDF_VER=v5.4.1
+PYTHON=$(command -v python3 2> /dev/null)
+PYTHON_VER=$(${PYTHON:-python} --version | cut -d' ' -f2)
 
 export IDF_CCACHE_ENABLE=1
 
 function ci_esp32_idf_setup {
-    pip3 install pyelftools
     git clone --depth 1 --branch $IDF_VER https://github.com/espressif/esp-idf.git
     # doing a treeless clone isn't quite as good as --shallow-submodules, but it
     # is smaller than full clones and works when the submodule commit isn't a head.
     git -C esp-idf submodule update --init --recursive --filter=tree:0
     ./esp-idf/install.sh
+    # Install additional packages for mpy_ld into the IDF env
+    source esp-idf/export.sh
+    pip3 install pyelftools
+    pip3 install ar
 }
 
 function ci_esp32_build_common {
@@ -179,8 +208,8 @@ function ci_esp32_build_s3_c3 {
 # ports/esp8266
 
 function ci_esp8266_setup {
-    sudo pip install pyserial esptool==3.3.1
-    wget https://github.com/jepler/esp-open-sdk/releases/download/2018-06-10/xtensa-lx106-elf-standalone.tar.gz
+    sudo pip3 install pyserial esptool==3.3.1 pyelftools ar
+    wget https://micropython.org/resources/xtensa-lx106-elf-standalone.tar.gz
     zcat xtensa-lx106-elf-standalone.tar.gz | tar x
     # Remove this esptool.py so pip version is used instead
     rm xtensa-lx106-elf/bin/esptool.py
@@ -196,6 +225,9 @@ function ci_esp8266_build {
     make ${MAKEOPTS} -C ports/esp8266 BOARD=ESP8266_GENERIC
     make ${MAKEOPTS} -C ports/esp8266 BOARD=ESP8266_GENERIC BOARD_VARIANT=FLASH_512K
     make ${MAKEOPTS} -C ports/esp8266 BOARD=ESP8266_GENERIC BOARD_VARIANT=FLASH_1M
+
+    # Test building native .mpy with xtensa architecture.
+    ci_native_mpy_modules_build xtensa
 }
 
 ########################################################################################
@@ -268,18 +300,20 @@ function ci_powerpc_build {
 # ports/qemu
 
 function ci_qemu_setup_arm {
-    ci_mpy_format_setup
     ci_gcc_arm_setup
     sudo apt-get update
     sudo apt-get install qemu-system
+    sudo pip3 install pyelftools
+    sudo pip3 install ar
     qemu-system-arm --version
 }
 
 function ci_qemu_setup_rv32 {
-    ci_mpy_format_setup
     ci_gcc_riscv_setup
     sudo apt-get update
     sudo apt-get install qemu-system
+    sudo pip3 install pyelftools
+    sudo pip3 install ar
     qemu-system-riscv32 --version
 }
 
@@ -331,6 +365,7 @@ function ci_renesas_ra_board_build {
 
 function ci_rp2_setup {
     ci_gcc_arm_setup
+    ci_picotool_setup
 }
 
 function ci_rp2_build {
@@ -342,7 +377,8 @@ function ci_rp2_build {
     make ${MAKEOPTS} -C ports/rp2 BOARD=RPI_PICO2 submodules
     make ${MAKEOPTS} -C ports/rp2 BOARD=RPI_PICO2
     make ${MAKEOPTS} -C ports/rp2 BOARD=W5100S_EVB_PICO submodules
-    make ${MAKEOPTS} -C ports/rp2 BOARD=W5100S_EVB_PICO
+    # This build doubles as a build test for disabling threads in the config
+    make ${MAKEOPTS} -C ports/rp2 BOARD=W5100S_EVB_PICO CFLAGS_EXTRA=-DMICROPY_PY_THREAD=0
 
     # Test building ninaw10 driver and NIC interface.
     make ${MAKEOPTS} -C ports/rp2 BOARD=ARDUINO_NANO_RP2040_CONNECT submodules
@@ -369,6 +405,7 @@ function ci_samd_build {
 function ci_stm32_setup {
     ci_gcc_arm_setup
     pip3 install pyelftools
+    pip3 install ar
     pip3 install pyhy
 }
 
@@ -487,17 +524,39 @@ function ci_native_mpy_modules_build {
     else
         arch=$1
     fi
-    for natmod in features1 features3 features4 deflate framebuf heapq random re
+    for natmod in features1 features3 features4 heapq re
     do
+        make -C examples/natmod/$natmod clean
         make -C examples/natmod/$natmod ARCH=$arch
     done
-    # btree requires thread local storage support on rv32imc.
-    if [ $arch != rv32imc ]; then
-        make -C examples/natmod/btree ARCH=$arch
+
+    # deflate, framebuf, and random currently cannot build on xtensa due to
+    # some symbols that have been removed from the compiler's runtime, in
+    # favour of being provided from ROM.
+    if [ $arch != "xtensa" ]; then
+        for natmod in deflate framebuf random
+        do
+            make -C examples/natmod/$natmod clean
+            make -C examples/natmod/$natmod ARCH=$arch
+        done
     fi
-    # features2 requires soft-float on armv7m and rv32imc.
-    if [ $arch != rv32imc ] && [ $arch != armv7m ]; then
+
+    # features2 requires soft-float on armv7m, rv32imc, and xtensa.  On armv6m
+    # the compiler generates absolute relocations in the object file
+    # referencing soft-float functions, which is not supported at the moment.
+    make -C examples/natmod/features2 clean
+    if [ $arch = "rv32imc" ] || [ $arch = "armv7m" ] || [ $arch = "xtensa" ]; then
+        make -C examples/natmod/features2 ARCH=$arch MICROPY_FLOAT_IMPL=float
+    elif [ $arch != "armv6m" ]; then
         make -C examples/natmod/features2 ARCH=$arch
+    fi
+
+    # btree requires thread local storage support on rv32imc, whilst on xtensa
+    # it relies on symbols that are provided from ROM but not exposed to
+    # natmods at the moment.
+    if [ $arch != "rv32imc" ] && [ $arch != "xtensa" ]; then
+        make -C examples/natmod/btree clean
+        make -C examples/natmod/btree ARCH=$arch
     fi
 }
 
@@ -534,6 +593,7 @@ function ci_unix_standard_v2_run_tests {
 function ci_unix_coverage_setup {
     sudo pip3 install setuptools
     sudo pip3 install pyelftools
+    sudo pip3 install ar
     gcc --version
     python3 --version
 }
@@ -579,10 +639,12 @@ function ci_unix_coverage_run_native_mpy_tests {
 function ci_unix_32bit_setup {
     sudo dpkg --add-architecture i386
     sudo apt-get update
-    sudo apt-get install gcc-multilib g++-multilib libffi-dev:i386
+    sudo apt-get install gcc-multilib g++-multilib libffi-dev:i386 python2.7
     sudo pip3 install setuptools
     sudo pip3 install pyelftools
+    sudo pip3 install ar
     gcc --version
+    python2.7 --version
     python3 --version
 }
 
@@ -601,12 +663,12 @@ function ci_unix_coverage_32bit_run_native_mpy_tests {
 
 function ci_unix_nanbox_build {
     # Use Python 2 to check that it can run the build scripts
-    ci_unix_build_helper PYTHON=python2 VARIANT=nanbox CFLAGS_EXTRA="-DMICROPY_PY_MATH_CONSTANTS=1"
+    ci_unix_build_helper PYTHON=python2.7 VARIANT=nanbox CFLAGS_EXTRA="-DMICROPY_PY_MATH_CONSTANTS=1"
     ci_unix_build_ffi_lib_helper gcc -m32
 }
 
 function ci_unix_nanbox_run_tests {
-    ci_unix_run_tests_full_helper nanbox PYTHON=python2
+    ci_unix_run_tests_full_helper nanbox PYTHON=python2.7
 }
 
 function ci_unix_float_build {
@@ -756,9 +818,9 @@ function ci_windows_build {
 ########################################################################################
 # ports/zephyr
 
-ZEPHYR_DOCKER_VERSION=v0.26.13
-ZEPHYR_SDK_VERSION=0.16.8
-ZEPHYR_VERSION=v3.7.0
+ZEPHYR_DOCKER_VERSION=v0.27.4
+ZEPHYR_SDK_VERSION=0.17.0
+ZEPHYR_VERSION=v4.0.0
 
 function ci_zephyr_setup {
     IMAGE=ghcr.io/zephyrproject-rtos/ci:${ZEPHYR_DOCKER_VERSION}
@@ -808,4 +870,19 @@ function ci_zephyr_run_tests {
     # Issues with zephyr tests:
     # - inf_nan_arith fails pow(-1, nan) test
     (cd tests && ./run-tests.py -t execpty:"qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -monitor null -serial pty -kernel ../ports/zephyr/build/zephyr/zephyr.elf" -d basics float --exclude inf_nan_arith)
+}
+
+########################################################################################
+# ports/alif
+
+function ci_alif_setup {
+    ci_gcc_arm_setup
+}
+
+function ci_alif_ae3_build {
+    make ${MAKEOPTS} -C mpy-cross
+    make ${MAKEOPTS} -C ports/alif BOARD=OPENMV_AE3 MCU_CORE=M55_HP submodules
+    make ${MAKEOPTS} -C ports/alif BOARD=OPENMV_AE3 MCU_CORE=M55_HE submodules
+    make ${MAKEOPTS} -C ports/alif BOARD=OPENMV_AE3 MCU_CORE=M55_DUAL
+    make ${MAKEOPTS} -C ports/alif BOARD=ALIF_ENSEMBLE MCU_CORE=M55_DUAL
 }

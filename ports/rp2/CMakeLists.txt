@@ -66,6 +66,11 @@ if(NOT MICROPY_C_HEAP_SIZE)
     set(MICROPY_C_HEAP_SIZE 0)
 endif()
 
+# Enable error text compression by default.
+if(NOT MICROPY_ROM_TEXT_COMPRESSION)
+    set(MICROPY_ROM_TEXT_COMPRESSION ON)
+endif()
+
 # Enable extmod components that will be configured by extmod.cmake.
 # A board may also have enabled additional components.
 set(MICROPY_SSL_MBEDTLS ON)
@@ -76,8 +81,11 @@ if (MICROPY_PY_NETWORK_CYW43)
 endif()
 
 # Necessary submodules for all boards.
-string(CONCAT GIT_SUBMODULES "${GIT_SUBMODULES} " lib/mbedtls)
-string(CONCAT GIT_SUBMODULES "${GIT_SUBMODULES} " lib/tinyusb)
+list(APPEND GIT_SUBMODULES lib/mbedtls)
+list(APPEND GIT_SUBMODULES lib/tinyusb)
+
+# Workaround for pico-sdk host toolchain issue, see directory for details
+list(APPEND CMAKE_MODULE_PATH "${MICROPY_PORT_DIR}/tools_patch")
 
 # Include component cmake fragments
 include(${MICROPY_DIR}/py/py.cmake)
@@ -165,6 +173,7 @@ set(MICROPY_SOURCE_PORT
     pendsv.c
     rp2_flash.c
     rp2_pio.c
+    rp2_psram.c
     rp2_dma.c
     uart.c
     usbd.c
@@ -276,7 +285,7 @@ if(PICO_RP2040)
 elseif(PICO_RP2350 AND PICO_ARM)
     target_sources(pico_float_micropython INTERFACE
         ${PICO_SDK_PATH}/src/rp2_common/pico_float/float_aeabi_dcp.S
-        ${PICO_SDK_PATH}/src/rp2_common/pico_float/float_conv_m33.S
+        ${PICO_SDK_PATH}/src/rp2_common/pico_float/float_common_m33.S
     )
 endif()
 
@@ -340,7 +349,7 @@ if (MICROPY_PY_BLUETOOTH_CYW43)
 endif()
 
 if (MICROPY_BLUETOOTH_BTSTACK)
-    string(CONCAT GIT_SUBMODULES "${GIT_SUBMODULES} " lib/btstack)
+    list(APPEND GIT_SUBMODULES lib/btstack)
 
     list(APPEND MICROPY_SOURCE_PORT mpbtstackport.c)
 
@@ -358,8 +367,8 @@ if (MICROPY_BLUETOOTH_BTSTACK)
 endif()
 
 if(MICROPY_BLUETOOTH_NIMBLE)
-    string(CONCAT GIT_SUBMODULES "${GIT_SUBMODULES} " lib/mynewt-nimble)
-    if(NOT (${ECHO_SUBMODULES}) AND NOT EXISTS ${MICROPY_DIR}/lib/mynewt-nimble/nimble/host/include/host/ble_hs.h)
+    list(APPEND GIT_SUBMODULES lib/mynewt-nimble)
+    if(NOT UPDATE_SUBMODULES AND NOT EXISTS ${MICROPY_DIR}/lib/mynewt-nimble/nimble/host/include/host/ble_hs.h)
         message(FATAL_ERROR " mynewt-nimble not initialized.\n Run 'make BOARD=${MICROPY_BOARD} submodules'")
     endif()
 
@@ -386,8 +395,8 @@ target_include_directories(${MICROPY_TARGET} PRIVATE
 )
 
 if (MICROPY_PY_NETWORK_CYW43)
-    string(CONCAT GIT_SUBMODULES "${GIT_SUBMODULES} " lib/cyw43-driver)
-    if((NOT (${ECHO_SUBMODULES})) AND NOT EXISTS ${MICROPY_DIR}/lib/cyw43-driver/src/cyw43.h)
+    list(APPEND GIT_SUBMODULES lib/cyw43-driver)
+    if(NOT UPDATE_SUBMODULES AND NOT EXISTS ${MICROPY_DIR}/lib/cyw43-driver/src/cyw43.h)
         message(FATAL_ERROR " cyw43-driver not initialized.\n Run 'make BOARD=${MICROPY_BOARD} submodules'")
     endif()
 
@@ -425,7 +434,7 @@ if (MICROPY_PY_NETWORK_NINAW10)
 
     # Enable NINA-W10 WiFi and Bluetooth drivers.
     list(APPEND MICROPY_SOURCE_DRIVERS
-        ${MICROPY_DIR}/drivers/ninaw10/nina_bt_hci.c
+        ${MICROPY_DIR}/drivers/ninaw10/nina_bthci_uart.c
         ${MICROPY_DIR}/drivers/ninaw10/nina_wifi_drv.c
         ${MICROPY_DIR}/drivers/ninaw10/nina_wifi_bsp.c
         ${MICROPY_DIR}/drivers/ninaw10/machine_pin_nina.c
@@ -433,8 +442,8 @@ if (MICROPY_PY_NETWORK_NINAW10)
 endif()
 
 if (MICROPY_PY_NETWORK_WIZNET5K)
-    string(CONCAT GIT_SUBMODULES "${GIT_SUBMODULES} " lib/wiznet5k)
-    if((NOT (${ECHO_SUBMODULES})) AND NOT EXISTS ${MICROPY_DIR}/lib/wiznet5k/README.md)
+    list(APPEND GIT_SUBMODULES lib/wiznet5k)
+    if(NOT UPDATE_SUBMODULES AND NOT EXISTS ${MICROPY_DIR}/lib/wiznet5k/README.md)
         message(FATAL_ERROR " wiznet5k not initialized.\n Run 'make BOARD=${MICROPY_BOARD} submodules'")
     endif()
 
