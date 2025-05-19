@@ -38,13 +38,16 @@
 
 // *FORMAT-OFF*
 
+// Within th VM, we can safely assume that code_state->fun_obj points to a mp_obj_fun_bc_t
+#define CODE_STATE_FUN_BC ((mp_obj_fun_bc_t *)code_state->fun_obj)
+
 #if 0
 #if MICROPY_PY_THREAD
 #define TRACE_PREFIX mp_printf(&mp_plat_print, "ts=%p sp=%d ", mp_thread_get_state(), (int)(sp - &code_state->state[0] + 1))
 #else
 #define TRACE_PREFIX mp_printf(&mp_plat_print, "sp=%d ", (int)(sp - &code_state->state[0] + 1))
 #endif
-#define TRACE(ip) TRACE_PREFIX; mp_bytecode_print2(&mp_plat_print, ip, 1, code_state->fun_bc->child_table, &code_state->fun_bc->context->constants);
+#define TRACE(ip) TRACE_PREFIX; mp_bytecode_print2(&mp_plat_print, ip, 1, CODE_STATE_FUN_BC->child_table, &CODE_STATE_FUN_BC->context->constants);
 #else
 #define TRACE(ip)
 #endif
@@ -102,11 +105,11 @@
 
 #define DECODE_PTR \
     DECODE_UINT; \
-    void *ptr = (void *)(uintptr_t)code_state->fun_bc->child_table[unum]
+    void *ptr = (void *)(uintptr_t)MP_FUN_BC_GET_CHILDREN(CODE_STATE_FUN_BC)[unum]
 
 #define DECODE_OBJ \
     DECODE_UINT; \
-    mp_obj_t obj = (mp_obj_t)code_state->fun_bc->context->constants.obj_table[unum]
+    mp_obj_t obj = (mp_obj_t)CODE_STATE_FUN_BC->context->constants.obj_table[unum]
 
 #define PUSH(val) *++sp = (val)
 #define POP() (*sp--)
@@ -154,6 +157,14 @@
     assert(code_state != code_state->prev_state); \
 } while(0)
 
+#define FRAME_LEAVE() do { \
+    assert(code_state != code_state->prev_state); \
+    MP_STATE_THREAD(current_code_state) = code_state->prev_state; \
+    assert(code_state != code_state->prev_state); \
+} while(0)
+
+#if MICROPY_PY_SYS_SETTRACE == 1
+
 #define FRAME_ENTER() do { \
     assert(code_state != code_state->prev_state); \
     code_state->prev_state = MP_STATE_THREAD(current_code_state); \
@@ -163,12 +174,6 @@
     } \
 } while(0)
 
-#define FRAME_LEAVE() do { \
-    assert(code_state != code_state->prev_state); \
-    MP_STATE_THREAD(current_code_state) = code_state->prev_state; \
-    assert(code_state != code_state->prev_state); \
-} while(0)
-
 #define FRAME_UPDATE() do { \
     assert(MP_STATE_THREAD(current_code_state) == code_state); \
     if (!mp_prof_is_executing) { \
@@ -176,23 +181,49 @@
     } \
 } while(0)
 
-#define TRACE_TICK(current_ip, current_sp, is_exception) do { \
+#define TRACE_TICK(current_ip, current_sp, exception_or_none) do { \
     assert(code_state != code_state->prev_state); \
     assert(MP_STATE_THREAD(current_code_state) == code_state); \
     if (!mp_prof_is_executing && code_state->frame && MP_STATE_THREAD(prof_trace_callback)) { \
         MP_PROF_INSTR_DEBUG_PRINT(code_state->ip); \
     } \
     if (!mp_prof_is_executing && code_state->frame && code_state->frame->callback) { \
-        mp_prof_instr_tick(code_state, is_exception); \
+        mp_prof_instr_tick(code_state, exception_or_none); \
     } \
 } while(0)
+
+#elif MICROPY_PY_SYS_SETTRACE == 2
+
+#define FRAME_ENTER() do { \
+    assert(code_state != code_state->prev_state); \
+    code_state->prev_state = MP_STATE_THREAD(current_code_state); \
+    assert(code_state != code_state->prev_state); \
+    if (MP_STATE_THREAD(prof_systrace_enabled)) { \
+        mp_prof_frame_enter(code_state); \
+    } \
+} while(0)
+
+#define FRAME_UPDATE() do { \
+    assert(MP_STATE_THREAD(current_code_state) == code_state); \
+    if (MP_STATE_THREAD(prof_systrace_enabled)) { \
+        code_state->frame = MP_OBJ_TO_PTR(mp_prof_frame_update(code_state)); \
+    } \
+} while(0)
+
+#define TRACE_TICK(current_ip, current_sp, exception_or_none) do { \
+    if (MP_STATE_THREAD(prof_systrace_enabled) && code_state->frame) { \
+        mp_prof_instr_tick(code_state, exception_or_none); \
+    } \
+} while(0)
+
+#endif // MICROPY_PY_SYS_SETTRACE == x
 
 #else // MICROPY_PY_SYS_SETTRACE
 #define FRAME_SETUP()
 #define FRAME_ENTER()
 #define FRAME_LEAVE()
 #define FRAME_UPDATE()
-#define TRACE_TICK(current_ip, current_sp, is_exception)
+#define TRACE_TICK(current_ip, current_sp, exception_or_none)
 #endif // MICROPY_PY_SYS_SETTRACE
 
 #if MICROPY_PY_BUILTINS_SLICE
@@ -247,7 +278,7 @@ mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_cod
     #define DISPATCH() do { \
         TRACE(ip); \
         MARK_EXC_IP_GLOBAL(); \
-        TRACE_TICK(ip, sp, false); \
+        TRACE_TICK(ip, sp, mp_const_none); \
         goto *entry_table[*ip++]; \
     } while (0)
     #define DISPATCH_WITH_PEND_EXC_CHECK() goto pending_exception_check
@@ -303,7 +334,7 @@ outer_dispatch_loop:
             const byte *ip = code_state->ip;
             mp_obj_t *sp = code_state->sp;
             #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
-            const qstr_short_t *qstr_table = code_state->fun_bc->context->constants.qstr_table;
+            const qstr_short_t *qstr_table = CODE_STATE_FUN_BC->context->constants.qstr_table;
             #endif
             mp_obj_t obj_shared;
             MICROPY_VM_HOOK_INIT
@@ -328,7 +359,7 @@ dispatch_loop:
                 #else
                 TRACE(ip);
                 MARK_EXC_IP_GLOBAL();
-                TRACE_TICK(ip, sp, false);
+                TRACE_TICK(ip, sp, mp_const_none);
                 switch (*ip++) {
                 #endif
 
@@ -920,7 +951,7 @@ unwind_jump:;
 
                 ENTRY(MP_BC_MAKE_FUNCTION): {
                     DECODE_PTR;
-                    PUSH(mp_make_function_from_proto_fun(ptr, code_state->fun_bc->context, NULL));
+                    PUSH(mp_make_function_from_proto_fun(ptr, CODE_STATE_FUN_BC->context, NULL));
                     DISPATCH();
                 }
 
@@ -928,7 +959,7 @@ unwind_jump:;
                     DECODE_PTR;
                     // Stack layout: def_tuple def_dict <- TOS
                     sp -= 1;
-                    SET_TOP(mp_make_function_from_proto_fun(ptr, code_state->fun_bc->context, sp));
+                    SET_TOP(mp_make_function_from_proto_fun(ptr, CODE_STATE_FUN_BC->context, sp));
                     DISPATCH();
                 }
 
@@ -937,7 +968,7 @@ unwind_jump:;
                     size_t n_closed_over = *ip++;
                     // Stack layout: closed_overs <- TOS
                     sp -= n_closed_over - 1;
-                    SET_TOP(mp_make_closure_from_proto_fun(ptr, code_state->fun_bc->context, n_closed_over, sp));
+                    SET_TOP(mp_make_closure_from_proto_fun(ptr, CODE_STATE_FUN_BC->context, n_closed_over, sp));
                     DISPATCH();
                 }
 
@@ -946,7 +977,7 @@ unwind_jump:;
                     size_t n_closed_over = *ip++;
                     // Stack layout: def_tuple def_dict closed_overs <- TOS
                     sp -= 2 + n_closed_over - 1;
-                    SET_TOP(mp_make_closure_from_proto_fun(ptr, code_state->fun_bc->context, 0x100 | n_closed_over, sp));
+                    SET_TOP(mp_make_closure_from_proto_fun(ptr, CODE_STATE_FUN_BC->context, 0x100 | n_closed_over, sp));
                     DISPATCH();
                 }
 
@@ -1427,7 +1458,7 @@ exception_handler:
             #if MICROPY_PY_SYS_SETTRACE
             // Exceptions are traced here
             if (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(((mp_obj_base_t*)nlr.ret_val)->type), MP_OBJ_FROM_PTR(&mp_type_Exception))) {
-                TRACE_TICK(code_state->ip, code_state->sp, true /* yes, it's an exception */);
+                TRACE_TICK(code_state->ip, code_state->sp, nlr.ret_val /* yes, it's an exception */);
             }
             #endif
 
@@ -1441,7 +1472,7 @@ unwind_loop:
             if (nlr.ret_val != &mp_const_GeneratorExit_obj
                 && *code_state->ip != MP_BC_END_FINALLY
                 && *code_state->ip != MP_BC_RAISE_LAST) {
-                const byte *ip = code_state->fun_bc->bytecode;
+                const byte *ip = MP_FUN_BC_GET_BYTECODE(CODE_STATE_FUN_BC);
                 MP_BC_PRELUDE_SIG_DECODE(ip);
                 MP_BC_PRELUDE_SIZE_DECODE(ip);
                 const byte *line_info_top = ip + n_info;
@@ -1452,10 +1483,10 @@ unwind_loop:
                     ip = mp_decode_uint_skip(ip);
                 }
                 #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
-                block_name = code_state->fun_bc->context->constants.qstr_table[block_name];
-                qstr source_file = code_state->fun_bc->context->constants.qstr_table[0];
+                block_name = CODE_STATE_FUN_BC->context->constants.qstr_table[block_name];
+                qstr source_file = CODE_STATE_FUN_BC->context->constants.qstr_table[0];
                 #else
-                qstr source_file = code_state->fun_bc->context->constants.source_file;
+                qstr source_file = CODE_STATE_FUN_BC->context->constants.source_file;
                 #endif
                 size_t source_line = mp_bytecode_get_source_line(ip, line_info_top, bc);
                 mp_obj_exception_add_traceback(MP_OBJ_FROM_PTR(nlr.ret_val), source_file, source_line, block_name);
