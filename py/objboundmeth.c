@@ -47,6 +47,11 @@ static void bound_meth_print(const mp_print_t *print, mp_obj_t o_in, mp_print_ki
 }
 #endif
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 mp_obj_t mp_call_method_self_n_kw(mp_obj_t meth, mp_obj_t self, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     // need to insert self before all other args and then call meth
     size_t n_total = n_args + 2 * n_kw;
@@ -77,6 +82,10 @@ mp_obj_t mp_call_method_self_n_kw(mp_obj_t meth, mp_obj_t self, size_t n_args, s
     #endif
     return res;
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 static mp_obj_t bound_meth_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     mp_obj_bound_meth_t *self = MP_OBJ_TO_PTR(self_in);

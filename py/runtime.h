@@ -177,7 +177,7 @@ static inline void mp_thread_init_state(mp_state_thread_t *ts, size_t stack_size
     ts->nlr_jump_callback_top = NULL;
     ts->mp_pending_exception = MP_OBJ_NULL;
 
-    #if MICROPY_PY_SYS_SETTRACE
+    #if MICROPY_PY_SYS_SETTRACE == 1
     ts->prof_trace_callback = MP_OBJ_NULL;
     ts->prof_callback_is_executing = false;
     ts->current_code_state = NULL;

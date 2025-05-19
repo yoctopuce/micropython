@@ -62,6 +62,10 @@ def preprocess():
             try:
                 return subprocess.check_output(args.pp + flags + files)
             except subprocess.CalledProcessError as er:
+                # Yoctopuce specific vvvvvv
+                # improve error reporting
+                print("CMD failed: [" + " ".join(args.pp + flags + files) + "]")
+                # Yoctopuce specific ^^^^^^
                 raise PreprocessorError(str(er))
 
         return run
@@ -191,6 +195,13 @@ if __name__ == "__main__":
                 "sources",
                 "changed_sources",
                 "dependencies",
+                # yoctopuce specific
+                # vvvvvvvvvvvvvvvvvv
+                "sources_f",
+                "changed_sources_f",
+                "dependencies_f",
+                # ^^^^^^^^^^^^^^^^^^
+                # yoctopuce specific
             ]
         }
 
@@ -198,7 +209,17 @@ if __name__ == "__main__":
             if arg in named_args:
                 current_tok = arg
             else:
-                named_args[current_tok].append(arg)
+                # yoctopuce specific
+                # vvvvvvvvvvvvvvvvvv
+                if current_tok.endswith("_f"):
+                    tok = current_tok[:-2]
+                    with open(arg, 'r') as f:
+                        content = f.read()
+                        named_args[tok] = content.split()
+                else:
+                    named_args[current_tok].append(arg)
+                # ^^^^^^^^^^^^^^^^^^
+                # yoctopuce specific
 
         if not named_args["pp"] or len(named_args["output"]) != 1:
             print("usage: %s %s ..." % (sys.argv[0], " ... ".join(named_args)))

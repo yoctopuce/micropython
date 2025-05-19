@@ -307,6 +307,8 @@ static mp_obj_t stream_write1_method(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_write1_obj, 2, 4, stream_write1_method);
 
+//-- Yoctopuce: we have our own implementation with xarray support
+#if 0
 static mp_obj_t stream_readinto(size_t n_args, const mp_obj_t *args) {
     return stream_readinto_write_generic(n_args, args, MP_STREAM_RW_READ);
 }
@@ -316,6 +318,8 @@ static mp_obj_t stream_readinto1(size_t n_args, const mp_obj_t *args) {
     return stream_readinto_write_generic(n_args, args, MP_STREAM_RW_READ | MP_STREAM_RW_ONCE);
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_stream_readinto1_obj, 2, 3, stream_readinto1);
+#endif
+//--
 
 static mp_obj_t stream_readall(mp_obj_t self_in) {
     const mp_stream_p_t *stream_p = mp_get_stream(self_in);
