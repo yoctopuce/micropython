@@ -63,7 +63,7 @@ static mp_obj_t code_execute(mp_obj_code_t *self, mp_obj_dict_t *globals, mp_obj
         #endif
         ) {
         mp_obj_fun_bc_t *fun_bc = MP_OBJ_TO_PTR(module_fun);
-        ((mp_module_context_t *)fun_bc->context)->module.globals = globals;
+        ((mp_module_context_t *)MP_FUN_BC_GET_CONTEXT(fun_bc))->module.globals = globals;
     }
     #endif
 

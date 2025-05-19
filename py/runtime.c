@@ -71,6 +71,12 @@ MP_REGISTER_MODULE(MP_QSTR___main__, mp_module___main__);
 void mp_init(void) {
     qstr_init();
 
+    #if MICROPY_PY_SYS_SETTRACE_USE_FROZEN_OBJFUN
+    // frozen obj_fun_bc need an indexed table of contexts in RAM
+    void mp_init_mp_frozen_contexts(void);
+    mp_init_mp_frozen_contexts();
+    #endif
+
     // no pending exceptions to start with
     MP_STATE_THREAD(mp_pending_exception) = MP_OBJ_NULL;
     #if MICROPY_ENABLE_SCHEDULER
@@ -104,6 +110,9 @@ void mp_init(void) {
     MP_STATE_VM(mp_optimise_value) = 0;
     #if MICROPY_EMIT_NATIVE
     MP_STATE_VM(default_emit_opt) = MP_EMIT_OPT_NONE;
+    #endif
+    #if MICROPY_COMP_PREDEFINED_CONST
+    MP_STATE_VM(predefined_const) = mp_const_none;
     #endif
     #endif
 
@@ -161,9 +170,12 @@ void mp_init(void) {
     MP_STATE_VM(sys_mutable[MP_SYS_MUTABLE_PS2]) = MP_OBJ_NEW_QSTR(MP_QSTR__dot__dot__dot__space_);
     #endif
 
-    #if MICROPY_PY_SYS_SETTRACE
+    #if MICROPY_PY_SYS_SETTRACE == 1
     MP_STATE_THREAD(prof_trace_callback) = MP_OBJ_NULL;
     MP_STATE_THREAD(prof_callback_is_executing) = false;
+    MP_STATE_THREAD(current_code_state) = NULL;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    MP_STATE_THREAD(prof_systrace_enabled) = false;
     MP_STATE_THREAD(current_code_state) = NULL;
     #endif
 
@@ -1541,6 +1553,10 @@ mp_obj_t mp_import_name(qstr name, mp_obj_t fromlist, mp_obj_t level) {
     return mp_builtin___import__(5, args);
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
 mp_obj_t mp_import_from(mp_obj_t module, qstr name) {
     DEBUG_printf("import from %p %s\n", module, qstr_str(name));
 
@@ -1588,6 +1604,9 @@ mp_obj_t mp_import_from(mp_obj_t module, qstr name) {
 import_error:
     mp_raise_msg_varg(&mp_type_ImportError, MP_ERROR_TEXT("can't import name %q"), name);
 }
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 void mp_import_all(mp_obj_t module) {
     DEBUG_printf("import all %p\n", module);

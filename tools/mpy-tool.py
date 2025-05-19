@@ -27,6 +27,7 @@
 import struct
 import sys
 from binascii import hexlify
+import json
 
 str_cons = str
 bytes_cons = bytes
@@ -561,6 +562,7 @@ class CompiledModule:
         mpy_segments,
         header,
         arch_flags,
+        meta_data,
         qstr_table,
         obj_table,
         raw_code,
@@ -574,6 +576,7 @@ class CompiledModule:
         self.source_file = qstr_table[0]
         self.header = header
         self.arch_flags = arch_flags
+        self.meta_data = meta_data
         self.qstr_table = qstr_table
         self.obj_table = obj_table
         self.raw_code = raw_code
@@ -581,6 +584,12 @@ class CompiledModule:
         self.obj_table_file_offset = obj_table_file_offset
         self.raw_code_file_offset = raw_code_file_offset
         self.escaped_name = escaped_name
+        module_name = self.source_file.str
+        if module_name.endswith("/__init__.py"):
+            self.short_name = module_name[: -len("/__init__.py")]
+        else:
+            self.short_name = module_name[: -len(".py")]
+
 
     def hexdump(self):
         with open(self.mpy_source_file, "rb") as f:
@@ -659,6 +668,10 @@ class CompiledModule:
         print("arch:", arch_name)
         if self.header[2] & MP_NATIVE_ARCH_FLAGS_PRESENT != 0:
             print("arch_flags:", hex(self.arch_flags))
+        if self.meta_data:
+            print("meta_data:")
+            for key, value in self.meta_data.items():
+                print("- %s: %s" % (key, repr(value)))
         print("qstr_table[%u]:" % len(self.qstr_table))
         for q in self.qstr_table:
             print("    %s" % q.str)
@@ -672,9 +685,13 @@ class CompiledModule:
         print("// - original source file: %s" % self.mpy_source_file)
         print("// - frozen file name: %s" % self.source_file.str)
         print("// - .mpy header: %s" % ":".join("%02x" % b for b in self.header))
+        if self.meta_data:
+            print("// - meta data:")
+            for key, value in self.meta_data.items():
+                print("//     %s: %s" % (key, repr(value)))
         print()
 
-        self.raw_code.freeze()
+        self.raw_code.freeze(compiled_module_index)
         print()
 
         self.freeze_constants()
@@ -780,7 +797,7 @@ class CompiledModule:
             print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C")
             n = struct.unpack("<I", struct.pack("<f", obj))[0]
             n = ((n & ~0x3) | 2) + 0x80800000
-            print("#define %s ((mp_rom_obj_t)(0x%08x))" % (macro_name, n))
+            print("#define %s ((mp_rom_obj_t)(size_t)(0x%08x))" % (macro_name, n))
             print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_D")
             n = struct.unpack("<Q", struct.pack("<d", obj))[0]
             n += 0x8004000000000000
@@ -900,12 +917,12 @@ class RawCode(object):
         for rc in self.children:
             rc.disassemble()
 
-    def freeze_children(self, prelude_ptr=None):
+    def freeze_children(self, compiled_module_index, prelude_ptr=None):
         # Freeze children and generate table of children.
         if len(self.children):
             for rc in self.children:
                 print("// child of %s" % self.escaped_name)
-                rc.freeze()
+                rc.freeze(compiled_module_index)
                 print()
             print("static const mp_raw_code_t *const children_%s[] = {" % self.escaped_name)
             for rc in self.children:
@@ -915,7 +932,7 @@ class RawCode(object):
             print("};")
             print()
 
-    def freeze_raw_code(self, prelude_ptr=None, type_sig=0):
+    def freeze_raw_code(self, compiled_module_index, prelude_ptr=None, type_sig=0):
         # Generate mp_raw_code_t.
         if self.code_kind == MP_CODE_NATIVE_ASM:
             raw_code_type = "mp_raw_code_t"
@@ -924,6 +941,8 @@ class RawCode(object):
 
         empty_children = len(self.children) == 0 and prelude_ptr is None
         generate_minimal = self.code_kind == MP_CODE_BYTECODE and empty_children
+        no_def_args = self.prelude_signature[4] + self.prelude_signature[5] == 0
+        generate_objfun = self.code_kind == MP_CODE_BYTECODE and no_def_args
 
         if generate_minimal:
             print("#if MICROPY_PERSISTENT_CODE_SAVE")
@@ -933,6 +952,10 @@ class RawCode(object):
         print("    .proto_fun_indicator[1] = MP_PROTO_FUN_INDICATOR_RAW_CODE_1,")
         print("    .kind = %s," % RawCode.code_kind_str[self.code_kind])
         print("    .is_generator = %d," % bool(self.scope_flags & MP_SCOPE_FLAG_GENERATOR))
+        print("    #if MICROPY_PY_SYS_SETTRACE_USE_FROZEN_OBJFUN")
+        print("    .has_const_fun_obj = %d," % generate_objfun)
+        print("    .frozen_module_idx = %d," % compiled_module_index)
+        print("    #endif")
         print("    .fun_data = fun_data_%s," % self.escaped_name)
         if len(self.children):
             print("    .children = (void *)&children_%s," % self.escaped_name)
@@ -943,37 +966,73 @@ class RawCode(object):
         print("    #if MICROPY_PERSISTENT_CODE_SAVE")
         print("    .fun_data_len = %u," % len(self.fun_data))
         print("    .n_children = %u," % len(self.children))
-        print("    #if MICROPY_EMIT_MACHINE_CODE")
-        print("    .prelude_offset = %u," % self.prelude_offset)
-        print("    #endif")
+        print("    .specific = {")
+        if self.code_kind == MP_CODE_NATIVE_PY:
+            print("        #if MICROPY_EMIT_MACHINE_CODE")
+            print("        .native_py = {")
+            print("            .prelude_offset = %u," % self.prelude_offset)
+            print("        },")
+            print("        #endif")
         if self.code_kind == MP_CODE_BYTECODE:
-            print("    #if MICROPY_PY_SYS_SETTRACE")
-            print("    .line_of_definition = %u," % 0)  # TODO
-            print("    .prelude = {")
-            print("        .n_state = %u," % self.prelude_signature[0])
-            print("        .n_exc_stack = %u," % self.prelude_signature[1])
-            print("        .scope_flags = %u," % self.prelude_signature[2])
-            print("        .n_pos_args = %u," % self.prelude_signature[3])
-            print("        .n_kwonly_args = %u," % self.prelude_signature[4])
-            print("        .n_def_pos_args = %u," % self.prelude_signature[5])
-            print("        .qstr_block_name_idx = %u," % self.names[0])
+            n_args = self.prelude_signature[3] + self.prelude_signature[4]
+            print("        #if MICROPY_PY_SYS_SETTRACE")
+            print("        .bytecode = {")
+            print("            #if MICROPY_PY_SYS_SETTRACE_USE_FULL_PRELUDE")
+            print("            .n_state = %u," % self.prelude_signature[0])
+            print("            .n_exc_stack = %u," % self.prelude_signature[1])
+            print("            .scope_flags = %u," % self.prelude_signature[2])
+            print("            .n_pos_args = %u," % self.prelude_signature[3])
+            print("            .n_kwonly_args = %u," % self.prelude_signature[4])
+            print("            .n_def_pos_args = %u," % self.prelude_signature[5])
+            print("            .line_of_definition_delta = 0,")
+            print("            .qstr_block_name_idx = %u," % self.names[0])
+            print("            #else")
+            print("            .n_args = %u," % n_args)
+            print("            .line_of_definition_delta = 0,")
+            print("            .qstr_block_name_idx = %u," % self.names[0])
+            print("            #endif")
             print(
-                "        .line_info = fun_data_%s + %u,"
+                "            .line_info = fun_data_%s + %u,"
                 % (self.escaped_name, self.offset_line_info)
             )
             print(
-                "        .line_info_top = fun_data_%s + %u,"
+                "            .line_info_top = fun_data_%s + %u,"
                 % (self.escaped_name, self.offset_closure_info)
             )
             print(
-                "        .opcodes = fun_data_%s + %u," % (self.escaped_name, self.offset_opcodes)
+                "            .opcodes = fun_data_%s + %u,"
+                % (self.escaped_name, self.offset_opcodes)
             )
+            print("        },")
+            print("        #endif")
+        if self.code_kind == MP_CODE_NATIVE_ASM:
+            print("        #if MICROPY_EMIT_INLINE_ASM")
+            print("        .native_asm = {")
+            print("            .n_pos_args = %u," % self.n_pos_args)
+            print("            .type_sig = %u," % type_sig)
+            print("        },")
+            print("        #endif")
+        print("    },")
+        if self.code_kind == MP_CODE_NATIVE_ASM:
+            print("    #elif MICROPY_EMIT_INLINE_ASM")
+            print("    .specific = {")
+            print("        .native_asm = {")
+            print("            .n_pos_args = %u," % self.n_pos_args)
+            print("            .type_sig = %u," % type_sig)
+            print("        },")
+            print("    },")
+        print("    #endif")
+        if generate_objfun:
+            print("    #if MICROPY_PY_SYS_SETTRACE_USE_FROZEN_OBJFUN")
+            print("    .fun_obj = {")
+            if self.scope_flags & MP_SCOPE_FLAG_GENERATOR:
+                print("        &mp_type_gen_wrap,                      // mp_obj_base_t base")
+            else:
+                print("        &mp_type_fun_bc,                        // mp_obj_base_t base")
+            print("        NULL,                                   // mp_module_context_t *context_ptr")
+            print("        &proto_fun_%-29s// mp_raw_code_truncated_t *rc" % self.escaped_name)
             print("    },")
             print("    #endif")
-        print("    #endif")
-        if self.code_kind == MP_CODE_NATIVE_ASM:
-            print("    .asm_n_pos_args = %u," % self.n_pos_args)
-            print("    .asm_type_sig = %u," % type_sig)
         print("};")
 
         if generate_minimal:
@@ -1017,7 +1076,7 @@ class RawCodeBytecode(RawCode):
             ip += sz
         self.disassemble_children()
 
-    def freeze(self):
+    def freeze(self, compiled_module_index):
         # generate bytecode data
         bc = self.fun_data
         print(
@@ -1056,8 +1115,8 @@ class RawCodeBytecode(RawCode):
 
         print("};")
 
-        self.freeze_children()
-        self.freeze_raw_code()
+        self.freeze_children(compiled_module_index)
+        self.freeze_raw_code(compiled_module_index)
 
         global bc_content
         bc_content += len(bc)
@@ -1133,7 +1192,7 @@ class RawCodeNative(RawCode):
             ip += sz
         self.disassemble_children()
 
-    def freeze(self):
+    def freeze(self, compiled_module_index):
         if self.scope_flags & ~0x0F:
             raise FreezeError("unable to freeze code with relocations")
 
@@ -1178,8 +1237,8 @@ class RawCodeNative(RawCode):
             )
             print("#endif")
 
-        self.freeze_children(prelude_ptr)
-        self.freeze_raw_code(prelude_ptr, self.type_sig)
+        self.freeze_children(compiled_module_index, prelude_ptr)
+        self.freeze_raw_code(compiled_module_index, prelude_ptr, self.type_sig)
 
 
 class MPYSegment:
@@ -1218,6 +1277,20 @@ class MPYReader:
                 break
         return i
 
+
+def read_meta(reader, segments):
+    metadata_len = reader.read_uint()
+    start_pos = reader.tell()
+    metastr = str_cons(reader.read_bytes(metadata_len), "utf8")
+    reader.read_byte()  # read and discard null terminator
+    segments.append(MPYSegment(MPYSegment.META, metastr, start_pos, reader.tell()))
+    try:
+        meta_data = json.loads(metastr)
+    except json.decoder.JSONDecodeError:
+        meta_data = { 'not_JSON': metastr }
+    except json.decoder.UnicodeError:
+        meta_data = { 'not_Unicode': metastr }
+    return meta_data
 
 def read_qstr(reader, segments):
     start_pos = reader.tell()
@@ -1376,7 +1449,10 @@ def read_mpy(filename):
                 config.native_arch = mpy_native_arch
             elif config.native_arch != mpy_native_arch:
                 raise MPYReadError(filename, "native architecture mismatch")
-        config.mp_small_int_bits = header[3]
+        config.mp_small_int_bits = header[3] & 0x7f
+        meta_data = {}
+        if header[3] & 0x80:
+            meta_data = read_meta(reader, segments)
 
         arch_flags = 0
         # Read the architecture-specific flag bits if present.
@@ -1412,6 +1488,7 @@ def read_mpy(filename):
         segments,
         header,
         arch_flags,
+        meta_data,
         qstr_table,
         obj_table,
         raw_code,
@@ -1572,6 +1649,16 @@ def freeze_mpy(firmware_qstr_idents, compiled_modules):
         print("    &frozen_module_%s," % cm.escaped_name)
     print("};")
     mp_frozen_mpy_content_size = len(compiled_modules * 4)
+
+    # If a port defines MICROPY_PY_SYS_SETTRACE_USE_FROZEN_OBJFUN, we need to allocate in
+    # RAM an array of pointers to keep track of the context object for each frozen module.
+    print()
+    print("#if MICROPY_PY_SYS_SETTRACE_USE_FROZEN_OBJFUN")
+    print("mp_module_context_t *mp_frozen_contexts[%d];" % len(compiled_modules))
+    print("void mp_init_mp_frozen_contexts(void) {")
+    print("    memset(mp_frozen_contexts, 0, sizeof(mp_frozen_contexts));")
+    print("}")
+    print("#endif")
 
     # If a port defines MICROPY_FROZEN_LIST_ITEM then list all modules wrapped in that macro.
     print()
@@ -1845,6 +1932,9 @@ def main(args=None):
     cmd_parser.add_argument(
         "-d", "--disassemble", action="store_true", help="output disassembled contents of files"
     )
+    cmd_parser.add_argument(
+        "-i", "--info", action="store_true", help="output the .mpy file meta-data information"
+    )
     cmd_parser.add_argument("-f", "--freeze", action="store_true", help="freeze files")
     cmd_parser.add_argument(
         "--merge", action="store_true", help="merge multiple .mpy files into one"
@@ -1920,6 +2010,12 @@ def main(args=None):
         if args.hexdump:
             print()
         disassemble_mpy(compiled_modules)
+
+    if args.info:
+        all_meta = dict()
+        for mod in compiled_modules:
+            all_meta[mod.short_name] = mod.meta_data
+        print(json.dumps(all_meta,indent=2))
 
     if args.freeze:
         try:

@@ -1272,7 +1272,7 @@ void gc_dump_alloc_table(const mp_print_t *print) {
                         c = 'F';
                     }
                     #endif
-                    else if (*ptr == &mp_type_fun_bc) {
+                    else if (*ptr == &mp_type_fun_bc || *ptr == &mp_type_gen_wrap) {
                         c = 'B';
                     } else if (*ptr == &mp_type_module) {
                         c = 'M';

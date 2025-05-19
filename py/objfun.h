@@ -28,12 +28,17 @@
 
 #include "py/bc.h"
 #include "py/obj.h"
+#include "py/emitglue.h"
 
 typedef struct _mp_obj_fun_bc_t {
     mp_obj_base_t base;
+    #if !MICROPY_PY_SYS_SETTRACE || MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN
     const mp_module_context_t *context;         // context within which this function was defined
     struct _mp_raw_code_t *const *child_table;  // table of children
     const byte *bytecode;                       // bytecode for the function
+    #else
+    const mp_module_context_t *context_ptr;     // context within which this function was defined, or NULL for frozen fun_bc
+    #endif
     #if MICROPY_PY_SYS_SETTRACE
     const struct _mp_raw_code_t *rc;
     #endif
@@ -42,6 +47,21 @@ typedef struct _mp_obj_fun_bc_t {
     //  - a single slot for default kw args dict (if it has them)
     mp_obj_t extra_args[];
 } mp_obj_fun_bc_t;
+
+#if !MICROPY_PY_SYS_SETTRACE || MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN
+#define MP_FUN_BC_GET_CONTEXT(fun_bc)  ((fun_bc)->context)
+#define MP_FUN_BC_GET_BYTECODE(fun_bc) ((fun_bc)->bytecode)
+#define MP_FUN_BC_GET_CHILDREN(fun_bc) ((fun_bc)->child_table)
+#else
+#if MICROPY_PY_SYS_SETTRACE_USE_FROZEN_OBJFUN
+extern const mp_module_context_t *mp_frozen_contexts[];
+#define MP_FUN_BC_GET_CONTEXT(fun_bc)  ((fun_bc)->context_ptr ? (fun_bc)->context_ptr : mp_frozen_contexts[(fun_bc)->rc->frozen_module_idx])
+#else
+#define MP_FUN_BC_GET_CONTEXT(fun_bc)  ((fun_bc)->context_ptr)
+#endif
+#define MP_FUN_BC_GET_BYTECODE(fun_bc) ((fun_bc)->rc->fun_data)
+#define MP_FUN_BC_GET_CHILDREN(fun_bc) ((fun_bc)->rc->children)
+#endif
 
 typedef struct _mp_obj_fun_asm_t {
     mp_obj_base_t base;

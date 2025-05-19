@@ -32,6 +32,7 @@
 #include "py/bc0.h"
 #include "py/bc.h"
 #include "py/objfun.h"
+#include "py/emitglue.h"
 
 #if MICROPY_DEBUG_VERBOSE // print debugging info
 #define DEBUG_PRINT (1)
@@ -189,6 +190,9 @@ static void mp_setup_code_state_helper(mp_code_state_t *code_state, size_t n_arg
     // check keyword arguments
 
     if (n_kw != 0 || (scope_flags & MP_SCOPE_FLAG_DEFKWARGS) != 0) {
+#if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
+        qstr_short_t *qstr_table = MP_FUN_BC_GET_CONTEXT(self)->constants.qstr_table;
+#endif
         DEBUG_printf("Initial args: ");
         dump_args(code_state_state + n_state - n_pos_args - n_kwonly_args, n_pos_args + n_kwonly_args);
 
@@ -209,7 +213,7 @@ static void mp_setup_code_state_helper(mp_code_state_t *code_state, size_t n_arg
             for (size_t j = 0; j < n_pos_args + n_kwonly_args; j++) {
                 qstr arg_qstr = mp_decode_uint(&arg_names);
                 #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
-                arg_qstr = self->context->constants.qstr_table[arg_qstr];
+                arg_qstr = qstr_table[arg_qstr];
                 #endif
                 if (wanted_arg_name == MP_OBJ_NEW_QSTR(arg_qstr)) {
                     if (code_state_state[n_state - 1 - j] != MP_OBJ_NULL) {
@@ -271,7 +275,7 @@ static void mp_setup_code_state_helper(mp_code_state_t *code_state, size_t n_arg
         for (size_t i = 0; i < n_kwonly_args; i++) {
             qstr arg_qstr = mp_decode_uint(&arg_names);
             #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
-            arg_qstr = self->context->constants.qstr_table[arg_qstr];
+            arg_qstr = qstr_table[arg_qstr];
             #endif
             if (code_state_state[n_state - 1 - n_pos_args - i] == MP_OBJ_NULL) {
                 mp_map_elem_t *elem = NULL;
@@ -320,7 +324,7 @@ static void mp_setup_code_state_helper(mp_code_state_t *code_state, size_t n_arg
 //    - code_state->fun_bc should contain a pointer to the function object
 //    - code_state->n_state should be the number of objects in the local state
 void mp_setup_code_state(mp_code_state_t *code_state, size_t n_args, size_t n_kw, const mp_obj_t *args) {
-    code_state->ip = code_state->fun_bc->bytecode;
+    code_state->ip = MP_FUN_BC_GET_BYTECODE(code_state->fun_bc);
     code_state->sp = &code_state->state[0] - 1;
     #if MICROPY_STACKLESS
     code_state->prev = NULL;
