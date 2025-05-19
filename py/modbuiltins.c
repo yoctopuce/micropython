@@ -659,12 +659,6 @@ static const mp_rom_map_elem_t mp_module_builtins_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_classmethod), MP_ROM_PTR(&mp_type_classmethod) },
     { MP_ROM_QSTR(MP_QSTR_staticmethod), MP_ROM_PTR(&mp_type_staticmethod) },
 
-    // built-in objects
-    { MP_ROM_QSTR(MP_QSTR_Ellipsis), MP_ROM_PTR(&mp_const_ellipsis_obj) },
-    #if MICROPY_PY_BUILTINS_NOTIMPLEMENTED
-    { MP_ROM_QSTR(MP_QSTR_NotImplemented), MP_ROM_PTR(&mp_const_notimplemented_obj) },
-    #endif
-
     // built-in user functions
     { MP_ROM_QSTR(MP_QSTR_abs), MP_ROM_PTR(&mp_builtin_abs_obj) },
     { MP_ROM_QSTR(MP_QSTR_all), MP_ROM_PTR(&mp_builtin_all_obj) },
@@ -757,6 +751,12 @@ static const mp_rom_map_elem_t mp_module_builtins_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ViperTypeError), MP_ROM_PTR(&mp_type_ViperTypeError) },
     #endif
     { MP_ROM_QSTR(MP_QSTR_ZeroDivisionError), MP_ROM_PTR(&mp_type_ZeroDivisionError) },
+
+    // built-in objects
+    { MP_ROM_QSTR(MP_QSTR_Ellipsis), MP_ROM_PTR(&mp_const_ellipsis_obj) },
+    #if MICROPY_PY_BUILTINS_NOTIMPLEMENTED
+    { MP_ROM_QSTR(MP_QSTR_NotImplemented), MP_ROM_PTR(&mp_const_notimplemented_obj) },
+    #endif
 
     // Extra builtins as defined by a port
     MICROPY_PORT_BUILTINS
