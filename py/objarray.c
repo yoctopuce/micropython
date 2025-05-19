@@ -606,6 +606,31 @@ static mp_int_t array_get_buffer(mp_obj_t o_in, mp_buffer_info_t *bufinfo, mp_ui
     return 0;
 }
 
+#if MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
+static mp_obj_t memoryview_cast(mp_obj_t o_in, mp_obj_t arg_in) {
+    mp_obj_array_t* o = MP_OBJ_TO_PTR(o_in);
+    size_t  sz = mp_binary_get_size('@', o->typecode & TYPECODE_MASK, NULL);
+    size_t  size = o->len * sz;
+    size_t  ofs = (size_t)o->memview_offset * sz;
+    char    new_typecode = *mp_obj_str_get_str(arg_in);
+    size_t  new_sz = mp_binary_get_size('@', new_typecode, NULL);
+
+    if (size % new_sz) {
+        mp_raise_ValueError(MP_ERROR_TEXT("unaligned size"));
+    }
+    if (ofs % new_sz) {
+        mp_raise_ValueError(MP_ERROR_TEXT("unaligned cast"));
+    }
+    mp_obj_array_t* res = MP_OBJ_TO_PTR(mp_obj_new_memoryview(new_typecode, size / new_sz, o->items));
+    res->memview_offset = ofs / new_sz;
+    if (o->typecode & MP_OBJ_ARRAY_TYPECODE_FLAG_RW) {
+        res->typecode |= MP_OBJ_ARRAY_TYPECODE_FLAG_RW; // indicate writable buffer
+    }
+    return MP_OBJ_FROM_PTR(res);
+}
+MP_DEFINE_CONST_FUN_OBJ_2(memoryview_cast_obj, memoryview_cast);
+#endif
+
 #if MICROPY_PY_ARRAY
 MP_DEFINE_CONST_OBJ_TYPE(
     mp_type_array,
@@ -645,7 +670,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
 #define MEMORYVIEW_TYPE_ATTR
 #endif
 
-#if MICROPY_PY_BUILTINS_BYTES_HEX
+#if MICROPY_PY_BUILTINS_BYTES_HEX || MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
 #define MEMORYVIEW_TYPE_LOCALS_DICT locals_dict, &mp_obj_memoryview_locals_dict,
 #else
 #define MEMORYVIEW_TYPE_LOCALS_DICT
@@ -665,6 +690,16 @@ MP_DEFINE_CONST_OBJ_TYPE(
     buffer, array_get_buffer
     );
 #endif // MICROPY_PY_BUILTINS_MEMORYVIEW
+
+#if MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
+static const mp_rom_map_elem_t mp_obj_memoryview_locals_dict_table[] = {
+    #if MICROPY_PY_BUILTINS_BYTES_HEX
+    { MP_ROM_QSTR(MP_QSTR_hex),         MP_ROM_PTR(&bytes_hex_as_str_obj) },
+    #endif
+    { MP_ROM_QSTR(MP_QSTR_cast),        MP_ROM_PTR(&memoryview_cast_obj) }
+};
+MP_DEFINE_CONST_DICT(mp_obj_memoryview_locals_dict, mp_obj_memoryview_locals_dict_table);
+#endif
 
 /* unused
 size_t mp_obj_array_len(mp_obj_t self_in) {

@@ -81,6 +81,16 @@ static mp_obj_t gc_mem_alloc(void) {
 }
 MP_DEFINE_CONST_FUN_OBJ_0(gc_mem_alloc_obj, gc_mem_alloc);
 
+#if MICROPY_GC_BIGBLK_AVAIL
+// bigblk_avail(): size of the largest heap RAM block available
+static mp_obj_t gc_bigblk_avail(void) {
+    gc_info_t info;
+    gc_info(&info);
+    return MP_OBJ_NEW_SMALL_INT(16 * info.max_free);
+}
+MP_DEFINE_CONST_FUN_OBJ_0(gc_bigblk_avail_obj, gc_bigblk_avail);
+#endif
+
 #if MICROPY_GC_ALLOC_THRESHOLD
 static mp_obj_t gc_threshold(size_t n_args, const mp_obj_t *args) {
     if (n_args == 0) {
@@ -108,6 +118,9 @@ static const mp_rom_map_elem_t mp_module_gc_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_isenabled), MP_ROM_PTR(&gc_isenabled_obj) },
     { MP_ROM_QSTR(MP_QSTR_mem_free), MP_ROM_PTR(&gc_mem_free_obj) },
     { MP_ROM_QSTR(MP_QSTR_mem_alloc), MP_ROM_PTR(&gc_mem_alloc_obj) },
+    #if MICROPY_GC_BIGBLK_AVAIL
+    { MP_ROM_QSTR(MP_QSTR_bigblk_avail), MP_ROM_PTR(&gc_bigblk_avail_obj) },
+    #endif
     #if MICROPY_GC_ALLOC_THRESHOLD
     { MP_ROM_QSTR(MP_QSTR_threshold), MP_ROM_PTR(&gc_threshold_obj) },
     #endif
