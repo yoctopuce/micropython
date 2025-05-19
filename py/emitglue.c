@@ -187,6 +187,7 @@ mp_obj_t mp_make_function_from_proto_fun(mp_proto_fun_t proto_fun, const mp_modu
         if (scope_flags & MP_SCOPE_FLAG_GENERATOR) {
             ((mp_obj_base_t *)MP_OBJ_TO_PTR(fun))->type = &mp_type_gen_wrap;
         }
+        MICROPY_OBJ_NEW_HOOK(fun);
         return fun;
     }
     #endif
@@ -227,6 +228,7 @@ mp_obj_t mp_make_function_from_proto_fun(mp_proto_fun_t proto_fun, const mp_modu
             mp_obj_fun_bc_t *self_fun = (mp_obj_fun_bc_t *)MP_OBJ_TO_PTR(fun);
             self_fun->rc = rc;
             #endif
+            MICROPY_OBJ_NEW_HOOK(fun);
 
             break;
     }
