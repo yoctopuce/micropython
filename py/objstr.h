@@ -105,6 +105,10 @@ const byte *find_subbytes(const byte *haystack, size_t hlen, const byte *needle,
 mp_obj_t mp_obj_bytes_hex(size_t n_args, const mp_obj_t *args, const mp_obj_type_t *type);
 mp_obj_t mp_obj_bytes_fromhex(mp_obj_t type_in, mp_obj_t data);
 
+#if MICROPY_PY_BUILTINS_BYTES_HEX
+MP_DECLARE_CONST_FUN_OBJ_VAR_BETWEEN(bytes_hex_as_str_obj);
+#endif
+
 extern const mp_obj_dict_t mp_obj_str_locals_dict;
 
 #if MICROPY_PY_BUILTINS_MEMORYVIEW && MICROPY_PY_BUILTINS_BYTES_HEX

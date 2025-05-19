@@ -107,12 +107,32 @@ static mp_obj_t time_time(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_time_time_obj, time_time);
 
+#if defined(mp_hal_time_ms)
+
+// time_ms()
+// Returns the number of milliseconds since the Epoch, as an integer.
+static mp_obj_t time_time_ms(void) {
+    return mp_obj_new_int_from_ull(mp_hal_time_ms());
+}
+MP_DEFINE_CONST_FUN_OBJ_0(mp_time_time_ms_obj, time_time_ms);
+
+// time_ns()
+// Returns the number of nanoseconds since the Epoch, as an integer.
+static mp_obj_t time_time_ns(void) {
+    return mp_obj_new_int_from_ull(mp_hal_time_ms() * 1000000u);
+}
+MP_DEFINE_CONST_FUN_OBJ_0(mp_time_time_ns_obj, time_time_ns);
+
+#else
+
 // time_ns()
 // Returns the number of nanoseconds since the Epoch, as an integer.
 static mp_obj_t time_time_ns(void) {
     return mp_obj_new_int_from_ull(mp_hal_time_ns());
 }
 MP_DEFINE_CONST_FUN_OBJ_0(mp_time_time_ns_obj, time_time_ns);
+
+#endif
 
 #endif // MICROPY_PY_TIME_TIME_TIME_NS
 
@@ -207,6 +227,9 @@ static const mp_rom_map_elem_t mp_module_time_globals_table[] = {
 
     #if MICROPY_PY_TIME_TIME_TIME_NS
     { MP_ROM_QSTR(MP_QSTR_time), MP_ROM_PTR(&mp_time_time_obj) },
+    #if defined(mp_hal_time_ms)
+    { MP_ROM_QSTR(MP_QSTR_time_ms), MP_ROM_PTR(&mp_time_time_ms_obj) },
+    #endif
     { MP_ROM_QSTR(MP_QSTR_time_ns), MP_ROM_PTR(&mp_time_time_ns_obj) },
     #endif
 

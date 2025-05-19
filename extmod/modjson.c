@@ -282,7 +282,11 @@ static mp_obj_t mod_json_load(mp_obj_t stream_obj) {
                 enter = true;
                 break;
             case '{':
+                #if MICROPY_PY_JSON_ORDEREDDICT
+                next = mp_obj_dict_make_new(&mp_type_ordereddict, 0, 0, NULL);
+                #else
                 next = mp_obj_new_dict(0);
+                #endif
                 enter = true;
                 break;
             case '}':
