@@ -33,6 +33,7 @@
 #include "py/objtype.h"
 #include "py/objint.h"
 #include "py/objstr.h"
+#include "py/objtuple.h"
 #include "py/runtime.h"
 #include "py/cstack.h"
 #include "py/stream.h" // for mp_obj_print
@@ -87,14 +88,38 @@ const mp_obj_type_t *MICROPY_WRAP_MP_OBJ_GET_TYPE(mp_obj_get_type)(mp_const_obj_
         return types[((uintptr_t)o_in >> 3) & 3];
     }
 
+    #elif MICROPY_OBJ_IMMEDIATE_OBJS && MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C2
+
+    // This implementation does not use mp_obj_is_* functions here as
+    // it makes the code significantly smaller (and faster)
+    mp_uint_t u = (mp_uint_t)o_in;
+    if (u & 1) { // mp_obj_is_float(o_in)
+    #if MICROPY_PY_BUILTINS_FLOAT
+        return &mp_type_float;
+    #else
+        return &mp_type_NoneType;
+    #endif
+    }
+    if (!(u & 2)) { // mp_obj_is_obj(o_in)
+        const mp_obj_base_t *o = MP_OBJ_TO_PTR(o_in);
+        return o->type;        
+    }
+    if (!(u & 4)) { // mp_obj_is_small_int(o_in)
+        return &mp_type_int;
+    }
+    if (!(u & 8)) { // mp_obj_is_qstr(o_in)
+        return &mp_type_str;
+    }
+    // immediate obj
+    return ((u & 16) ? &mp_type_bool : &mp_type_NoneType);
+
     #else
 
     if (mp_obj_is_small_int(o_in)) {
         return &mp_type_int;
     } else if (mp_obj_is_qstr(o_in)) {
         return &mp_type_str;
-        #if MICROPY_PY_BUILTINS_FLOAT && ( \
-            MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C || MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_D)
+        #if MICROPY_PY_BUILTINS_FLOAT && MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_D)
     } else if (mp_obj_is_float(o_in)) {
         return &mp_type_float;
         #endif
@@ -314,6 +339,36 @@ mp_int_t mp_obj_get_int(mp_const_obj_t arg) {
     return val;
 }
 
+#if MICROPY_LONGINT_IMPL != MICROPY_LONGINT_IMPL_NONE
+mp_uint_t mp_obj_get_uint(mp_const_obj_t arg) {
+    if (!mp_obj_is_exact_type(arg, &mp_type_int)) {
+        mp_obj_t as_int = mp_unary_op(MP_UNARY_OP_INT_MAYBE, (mp_obj_t)arg);
+        if (as_int == MP_OBJ_NULL) {
+            mp_raise_TypeError_int_conversion(arg);
+        }
+        arg = as_int;
+    }
+    return mp_obj_int_get_uint_checked(arg);
+}
+
+long long mp_obj_get_ll(mp_const_obj_t arg) {
+    if (!mp_obj_is_exact_type(arg, &mp_type_int)) {
+        mp_obj_t as_int = mp_unary_op(MP_UNARY_OP_INT_MAYBE, (mp_obj_t)arg);
+        if (as_int == MP_OBJ_NULL) {
+            mp_raise_TypeError_int_conversion(arg);
+        }
+        arg = as_int;
+    }
+    if (mp_obj_is_small_int(arg)) {
+        return MP_OBJ_SMALL_INT_VALUE(arg);
+    } else {
+        long long res;
+        mp_obj_int_to_bytes_impl((mp_obj_t)arg, MP_ENDIANNESS_BIG, sizeof(res), (byte *)&res);
+        return res;
+    }
+}
+#endif
+
 mp_int_t mp_obj_get_int_truncated(mp_const_obj_t arg) {
     if (mp_obj_is_int(arg)) {
         return mp_obj_int_get_truncated(arg);
@@ -420,7 +475,7 @@ void mp_obj_get_complex(mp_obj_t arg, mp_float_t *real, mp_float_t *imag) {
 
 // note: returned value in *items may point to the interior of a GC block
 void mp_obj_get_array(mp_obj_t o, size_t *len, mp_obj_t **items) {
-    if (mp_obj_is_type(o, &mp_type_tuple)) {
+    if (mp_obj_is_tuple_compatible(o)) {
         mp_obj_tuple_get(o, len, items);
     } else if (mp_obj_is_type(o, &mp_type_list)) {
         mp_obj_list_get(o, len, items);

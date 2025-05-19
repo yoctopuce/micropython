@@ -55,6 +55,13 @@
 // Mask to truncate mp_int_t to positive value
 #define MP_SMALL_INT_POSITIVE_MASK ~(0xffff800000000000 | (0xffff800000000000 >> 1))
 
+#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C2
+
+#define MP_SMALL_INT_MIN ((mp_int_t)(((mp_int_t)MP_OBJ_WORD_MSBIT_HIGH) >> 3))
+#define MP_SMALL_INT_FITS(n) ((((n) & MP_SMALL_INT_MIN) == 0) || (((n) & MP_SMALL_INT_MIN) == MP_SMALL_INT_MIN))
+// Mask to truncate mp_int_t to positive value
+#define MP_SMALL_INT_POSITIVE_MASK ~(MP_OBJ_WORD_MSBIT_HIGH | (MP_OBJ_WORD_MSBIT_HIGH >> 1) | (MP_OBJ_WORD_MSBIT_HIGH >> 2) | (MP_OBJ_WORD_MSBIT_HIGH >> 3))
+
 #endif
 
 #endif
@@ -68,7 +75,7 @@
 // The number of bits in a MP_SMALL_INT including the sign bit.
 #define MP_SMALL_INT_BITS (MP_IMAX_BITS(MP_SMALL_INT_MAX) + 1)
 
-bool mp_small_int_mul_overflow(mp_int_t x, mp_int_t y);
+bool mp_small_int_mul_overflow(mp_int_t x, mp_int_t y, mp_int_t *res);
 mp_int_t mp_small_int_modulo(mp_int_t dividend, mp_int_t divisor);
 mp_int_t mp_small_int_floor_divide(mp_int_t num, mp_int_t denom);
 

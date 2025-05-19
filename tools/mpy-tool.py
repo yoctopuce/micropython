@@ -27,6 +27,7 @@
 # Python 2/3/MicroPython compatibility code
 from __future__ import print_function
 import sys
+import json
 
 if sys.version_info[0] == 2:
     from binascii import hexlify as hexlify_py2
@@ -561,6 +562,7 @@ class CompiledModule:
         mpy_source_file,
         mpy_segments,
         header,
+        meta_data,
         qstr_table,
         obj_table,
         raw_code,
@@ -573,6 +575,7 @@ class CompiledModule:
         self.mpy_segments = mpy_segments
         self.source_file = qstr_table[0]
         self.header = header
+        self.meta_data = meta_data
         self.qstr_table = qstr_table
         self.obj_table = obj_table
         self.raw_code = raw_code
@@ -580,6 +583,12 @@ class CompiledModule:
         self.obj_table_file_offset = obj_table_file_offset
         self.raw_code_file_offset = raw_code_file_offset
         self.escaped_name = escaped_name
+        module_name = self.source_file.str
+        if module_name.endswith("/__init__.py"):
+            self.short_name = module_name[: -len("/__init__.py")]
+        else:
+            self.short_name = module_name[: -len(".py")]
+
 
     def hexdump(self):
         with open(self.mpy_source_file, "rb") as f:
@@ -650,6 +659,10 @@ class CompiledModule:
         print("mpy_source_file:", self.mpy_source_file)
         print("source_file:", self.source_file.str)
         print("header:", hexlify_to_str(self.header))
+        if self.meta_data:
+            print("meta_data:")
+            for key, value in self.meta_data.items():
+                print("- %s: %s" % (key, repr(value)))
         print("qstr_table[%u]:" % len(self.qstr_table))
         for q in self.qstr_table:
             print("    %s" % q.str)
@@ -663,6 +676,10 @@ class CompiledModule:
         print("// - original source file: %s" % self.mpy_source_file)
         print("// - frozen file name: %s" % self.source_file.str)
         print("// - .mpy header: %s" % ":".join("%02x" % b for b in self.header))
+        if self.meta_data:
+            print("// - meta data:")
+            for key, value in self.meta_data.items():
+                print("//     %s: %s" % (key, repr(value)))
         print()
 
         self.raw_code.freeze()
@@ -771,7 +788,11 @@ class CompiledModule:
             print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C")
             n = struct.unpack("<I", struct.pack("<f", obj))[0]
             n = ((n & ~0x3) | 2) + 0x80800000
-            print("#define %s ((mp_rom_obj_t)(0x%08x))" % (macro_name, n))
+            print("#define %s ((mp_rom_obj_t)(size_t)(0x%08x))" % (macro_name, n))
+            print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C2")
+            n = struct.unpack("<I", struct.pack("<f", obj))[0]
+            n = n | 1
+            print("#define %s ((mp_rom_obj_t)(size_t)(0x%08x))" % (macro_name, n))
             print("#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_D")
             n = struct.unpack("<Q", struct.pack("<d", obj))[0]
             n += 0x8004000000000000
@@ -1209,6 +1230,20 @@ class MPYReader:
         return i
 
 
+def read_meta(reader, segments):
+    metadata_len = reader.read_uint()
+    start_pos = reader.tell()
+    metastr = str_cons(reader.read_bytes(metadata_len), "utf8")
+    reader.read_byte()  # read and discard null terminator
+    segments.append(MPYSegment(MPYSegment.META, metastr, start_pos, reader.tell()))
+    try:
+        meta_data = json.loads(metastr)
+    except json.decoder.JSONDecodeError:
+        meta_data = { 'not_JSON': metastr }
+    except json.decoder.UnicodeError:
+        meta_data = { 'not_Unicode': metastr }
+    return meta_data
+
 def read_qstr(reader, segments):
     start_pos = reader.tell()
     ln = reader.read_uint()
@@ -1366,7 +1401,10 @@ def read_mpy(filename):
                 config.native_arch = mpy_native_arch
             elif config.native_arch != mpy_native_arch:
                 raise MPYReadError(filename, "native architecture mismatch")
-        config.mp_small_int_bits = header[3]
+        config.mp_small_int_bits = header[3] & 0x7f
+        meta_data = {}
+        if header[3] & 0x80:
+            meta_data = read_meta(reader, segments)
 
         # Read number of qstrs, and number of objects.
         n_qstr = reader.read_uint()
@@ -1396,6 +1434,7 @@ def read_mpy(filename):
         filename,
         segments,
         header,
+        meta_data,
         qstr_table,
         obj_table,
         raw_code,
@@ -1777,6 +1816,9 @@ def main(args=None):
     cmd_parser.add_argument(
         "-d", "--disassemble", action="store_true", help="output disassembled contents of files"
     )
+    cmd_parser.add_argument(
+        "-i", "--info", action="store_true", help="output the .mpy file meta-data information"
+    )
     cmd_parser.add_argument("-f", "--freeze", action="store_true", help="freeze files")
     cmd_parser.add_argument(
         "--merge", action="store_true", help="merge multiple .mpy files into one"
@@ -1837,6 +1879,12 @@ def main(args=None):
         if args.hexdump:
             print()
         disassemble_mpy(compiled_modules)
+
+    if args.info:
+        all_meta = dict()
+        for mod in compiled_modules:
+            all_meta[mod.short_name] = mod.meta_data
+        print(json.dumps(all_meta,indent=2))
 
     if args.freeze:
         try:

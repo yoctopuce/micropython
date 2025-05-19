@@ -85,8 +85,14 @@
 // Enable everything (e.g. coverage)
 #define MICROPY_CONFIG_ROM_LEVEL_EVERYTHING (50)
 
-#ifdef MP_CONFIGFILE
+#if defined(MP_CONFIGFILE)
 #include MP_CONFIGFILE
+#elif defined(VIRTUAL_HUB) || defined(TEXAS_API)
+// Yoctopuce specific vvvvvv
+//
+// Use a specific filename for our setting file, to avoid confusion with the multiple mpconfig files in mpy tree
+#include <mpylink/ympconfig.h>
+// Yoctopuce specific ^^^^^^
 #else
 #include <mpconfigport.h>
 #endif
@@ -149,6 +155,14 @@
 // Small-ints and strs have 1 as LSB to make sure they don't look like pointers
 // to the garbage collector.
 #define MICROPY_OBJ_REPR_D (3)
+
+// A MicroPython object is a machine word having the following form:
+//  - xxxx...xxxx1 : 31-bit fp (last mantissa bit is lost)
+//  - xxxx...xx010 : 29-bit small int, bits 3 and above are the value
+//  - xxxx...x0110 : a qstr, bits 4 and above are the value
+//  - xxxx...x1110 : an immediate object, bits 4 and above are the value
+//  - xxxx...xxx00 : a pointer to an mp_obj_base_t
+#define MICROPY_OBJ_REPR_C2 (4)
 
 #ifndef MICROPY_OBJ_REPR
 #define MICROPY_OBJ_REPR (MICROPY_OBJ_REPR_A)
@@ -464,6 +478,11 @@
 #define MICROPY_COMP_CONST_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable relational comparison folding; eg prune statements like if _DEBUG_LEVEL > 3
+#ifndef MICROPY_COMP_COMPAR_FOLDING
+#define MICROPY_COMP_COMPAR_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to compile constant tuples immediately to their respective objects; eg (1, True)
 // Otherwise the tuple will be built at runtime
 #ifndef MICROPY_COMP_CONST_TUPLE
@@ -475,6 +494,11 @@
 #define MICROPY_COMP_CONST_LITERAL (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to handle sys.implementation.name as a compile time constant
+#ifndef MICROPY_COMP_SYSNAME_CONST
+#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to enable lookup of constants in modules; eg module.CONST
 #ifndef MICROPY_COMP_MODULE_CONST
 #define MICROPY_COMP_MODULE_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
@@ -483,6 +507,23 @@
 // Whether to enable constant optimisation; id = const(value)
 #ifndef MICROPY_COMP_CONST
 #define MICROPY_COMP_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to enable float constant folding like 1.2+3.4 (when MICROPY_COMP_CONST_FOLDING is also enabled)
+// and constant optimisation like id = const(1.2) (when MICROPY_COMP_CONST is also enabled)
+// and constant lookup like math.inf (when MICROPY_COMP_MODULE_CONST is also enabled)
+#ifndef MICROPY_COMP_CONST_FLOAT
+#define MICROPY_COMP_CONST_FLOAT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to enable class constants; class MyClass: FLAG = const(1)
+#ifndef MICROPY_COMP_CONST_MEMBERS
+#define MICROPY_COMP_CONST_MEMBERS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to enable preloading compile-time constants from an include file
+#ifndef MICROPY_COMP_PREDEFINED_CONST
+#define MICROPY_COMP_PREDEFINED_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 // Whether to enable optimisation of: a, b = c, d
@@ -501,6 +542,21 @@
 // Costs about 80 bytes (Thumb2) and saves 2 bytes of bytecode for each use
 #ifndef MICROPY_COMP_RETURN_IF_EXPR
 #define MICROPY_COMP_RETURN_IF_EXPR (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether to parse module docstring to add metadata to .mpy files
+#ifndef MICROPY_COMP_ADD_METADATA
+#define MICROPY_COMP_ADD_METADATA (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to prune __future__ imports at compile time
+#ifndef MICROPY_COMP_DROP_FUTURE_IMPORT
+#define MICROPY_COMP_DROP_FUTURE_IMPORT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to drop typing.cast() expressions at compile time
+#ifndef MICROPY_COMP_DROP_TYPING_CAST
+#define MICROPY_COMP_DROP_TYPING_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 /*****************************************************************************/
@@ -856,6 +912,23 @@ typedef double mp_float_t;
 #define MICROPY_PY_BUILTINS_COMPLEX (MICROPY_PY_BUILTINS_FLOAT)
 #endif
 
+// Float conversion to/from string implementations
+#define MICROPY_FLTCONV_IMPL_BASIC (0)  // smallest code, but inexact
+#define MICROPY_FLTCONV_IMPL_APPROX (1) // slightly bigger, almost perfect
+#define MICROPY_FLTCONV_IMPL_EXACT (2)  // bigger code, but 100% exact repr
+
+#if MICROPY_FLOAT_IMPL == MICROPY_FLOAT_IMPL_FLOAT
+#define MICROPY_FLOAT_DEFAULT_FLTCONV_IMPL (MICROPY_FLTCONV_IMPL_APPROX)
+#elif defined(__SIZEOF_LONG_DOUBLE__) && __SIZEOF_LONG_DOUBLE__ > __SIZEOF_DOUBLE__
+#define MICROPY_FLOAT_DEFAULT_FLTCONV_IMPL (MICROPY_FLTCONV_IMPL_EXACT)
+#else
+#define MICROPY_FLOAT_DEFAULT_FLTCONV_IMPL (MICROPY_FLTCONV_IMPL_APPROX)
+#endif
+
+#ifndef MICROPY_FLTCONV_IMPL
+#define MICROPY_FLTCONV_IMPL (MICROPY_FLOAT_DEFAULT_FLTCONV_IMPL)
+#endif
+
 // Whether to use the native _Float16 for 16-bit float support
 #ifndef MICROPY_FLOAT_USE_NATIVE_FLT16
 #ifdef __FLT16_MAX__
@@ -886,6 +959,61 @@ typedef double mp_float_t;
 // affected, not system).
 #ifndef MICROPY_FULL_CHECKS
 #define MICROPY_FULL_CHECKS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Ports can choose to use timestamps based on 2000-01-01 or 1970-01-01
+// Default is timestamps based on 2000-01-01
+#if !defined(MICROPY_EPOCH_IS_2000) && !defined(MICROPY_EPOCH_IS_1970)
+#define MICROPY_EPOCH_IS_2000 (1)
+#define MICROPY_EPOCH_IS_1970 (0)
+#elif !defined(MICROPY_EPOCH_IS_1970)
+#define MICROPY_EPOCH_IS_1970 (0)
+#elif !defined(MICROPY_EPOCH_IS_2000)
+#define MICROPY_EPOCH_IS_2000 (0)
+#endif
+
+// To maintain reasonable compatibility with CPython on embedded systems,
+// and avoid breaking anytime soon, time functions are defined to work
+// at least between 1970 and 2099 (included) on any machine.
+//
+// Specific ports can enable extended date support
+// - after 2099 using MICROPY_TIME_SUPPORT_Y2100_AND_BEYOND
+// - before 1970 using MICROPY_TIME_SUPPORT_Y1969_AND_BEFORE
+// The largest possible range is year 1600 to year 3000
+//
+// By default this is enabled for machines using 64 bit pointers only,
+// but it can be enabled by specific ports
+#ifndef MICROPY_TIME_SUPPORT_Y2100_AND_BEYOND
+#if MP_SSIZE_MAX > 2147483647
+#define MICROPY_TIME_SUPPORT_Y2100_AND_BEYOND (1)
+#define MICROPY_TIME_SUPPORT_Y1969_AND_BEFORE (1)
+#else
+#define MICROPY_TIME_SUPPORT_Y2100_AND_BEYOND (0)
+#define MICROPY_TIME_SUPPORT_Y1969_AND_BEFORE (0)
+#endif
+#endif
+
+// The type to be used to represent platform-specific timestamps depends on the choices above
+#define MICROPY_TIMESTAMP_IMPL_LONG_LONG (0)
+#define MICROPY_TIMESTAMP_IMPL_UINT (1)
+#define MICROPY_TIMESTAMP_IMPL_TIME_T (2)
+
+#ifndef MICROPY_TIMESTAMP_IMPL
+#if MICROPY_TIME_SUPPORT_Y2100_AND_BEYOND || MICROPY_TIME_SUPPORT_Y1969_AND_BEFORE || MICROPY_EPOCH_IS_2000
+#define MICROPY_TIMESTAMP_IMPL (MICROPY_TIMESTAMP_IMPL_LONG_LONG)
+#else
+#define MICROPY_TIMESTAMP_IMPL (MICROPY_TIMESTAMP_IMPL_UINT)
+#endif
+#endif
+
+// `timestamp_t` is the type that should be used by the port
+// to represent timestamps, and is referenced to the platform epoch
+#if MICROPY_TIMESTAMP_IMPL == MICROPY_TIMESTAMP_IMPL_LONG_LONG
+typedef long long timestamp_t;
+#elif MICROPY_TIMESTAMP_IMPL == MICROPY_TIMESTAMP_IMPL_UINT
+typedef mp_uint_t timestamp_t;
+#elif MICROPY_TIMESTAMP_IMPL == MICROPY_TIMESTAMP_IMPL_TIME_T
+typedef time_t timestamp_t;
 #endif
 
 // Whether POSIX-semantics non-blocking streams are supported
@@ -1171,6 +1299,11 @@ typedef double mp_float_t;
 // Whether to support memoryview.itemsize attribute
 #ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE
 #define MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether to support memoryview.cast method
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to support set object
@@ -1538,6 +1671,11 @@ typedef double mp_float_t;
 // Whether to provide "sys.exit" function
 #ifndef MICROPY_PY_SYS_EXIT
 #define MICROPY_PY_SYS_EXIT (1)
+#endif
+
+// Whether to provide "sys.watchdog" function (Yoctopuce extension)
+#ifndef MICROPY_PY_SYS_WATCHDOG
+#define MICROPY_PY_SYS_WATCHDOG (0)
 #endif
 
 // Whether to provide "sys.atexit" function (MicroPython extension)

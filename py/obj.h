@@ -26,7 +26,8 @@
 #ifndef MICROPY_INCLUDED_PY_OBJ_H
 #define MICROPY_INCLUDED_PY_OBJ_H
 
-#include <assert.h>
+// Yoctopuce - should not include assert.h everywhere !
+// #include <assert.h>
 
 #include "py/mpconfig.h"
 #include "py/misc.h"
@@ -186,7 +187,7 @@ static inline bool mp_obj_is_small_int(mp_const_obj_t o) {
 #if MICROPY_PY_BUILTINS_FLOAT
 #include <math.h>
 // note: MP_OBJ_NEW_CONST_FLOAT should be a MP_ROM_PTR but that macro isn't available yet
-#define MP_OBJ_NEW_CONST_FLOAT(f) ((mp_obj_t)((((((uint64_t)f) & ~3) | 2) + 0x80800000) & 0xffffffff))
+#define MP_OBJ_NEW_CONST_FLOAT(f) ((mp_obj_t)((((((int64_t)f) & ~3) | 2) + 0x80800000) & 0xffffffff))
 #define mp_const_float_e  MP_OBJ_NEW_CONST_FLOAT(0x402df854)
 #define mp_const_float_pi MP_OBJ_NEW_CONST_FLOAT(0x40490fdb)
 #define mp_const_float_nan MP_OBJ_NEW_CONST_FLOAT(0x7fc00000)
@@ -317,6 +318,64 @@ typedef union _mp_rom_obj_t {
 #define MP_ROM_PTR(p) {.u32 = {.lo = (p), .hi = NULL}}
 #else
 #define MP_ROM_PTR(p) {.u32 = {.lo = NULL, .hi = (p)}}
+#endif
+
+#elif MICROPY_OBJ_REPR == MICROPY_OBJ_REPR_C2
+
+static inline bool mp_obj_is_small_int(mp_const_obj_t o) {
+    return (((mp_int_t)(o)) & 7) == 2;
+}
+#define MP_OBJ_SMALL_INT_VALUE(o) (((mp_int_t)(o)) >> 3)
+#define MP_OBJ_NEW_SMALL_INT(i) ((mp_obj_t)(((mp_uint_t)(i) << 3) | 2))
+
+static inline bool mp_obj_is_qstr(mp_const_obj_t o) {
+    return (((mp_uint_t)(o)) & 15) == 6;
+}
+#define MP_OBJ_QSTR_VALUE(o) (((mp_uint_t)(o)) >> 4)
+#define MP_OBJ_NEW_QSTR(qst) ((mp_obj_t)((((mp_uint_t)(qst)) << 4) | 6))
+
+static inline bool mp_obj_is_immediate_obj(mp_const_obj_t o) {
+    return (((mp_uint_t)(o)) & 15) == 14;
+}
+#define MP_OBJ_IMMEDIATE_OBJ_VALUE(o) (((mp_uint_t)(o)) >> 4)
+#define MP_OBJ_NEW_IMMEDIATE_OBJ(val) ((mp_obj_t)(((val) << 4) | 14))
+
+static inline bool mp_obj_is_obj(mp_const_obj_t o) {
+    return (((mp_uint_t)(o)) & 3) == 0;
+}
+#define MP_OBJ_TO_PTR(o) ((void *)(o))
+#define MP_OBJ_FROM_PTR(p) ((mp_obj_t)(p))
+
+#if MICROPY_PY_BUILTINS_FLOAT
+#include <math.h>
+#define MP_OBJ_NEW_CONST_FLOAT(f) MP_ROM_PTR((mp_obj_t)(((mp_int_t)f) | 1))
+#define mp_const_float_e  MP_OBJ_NEW_CONST_FLOAT(0x402df854)
+#define mp_const_float_pi MP_OBJ_NEW_CONST_FLOAT(0x40490fdb)
+#if MICROPY_PY_MATH_CONSTANTS
+#define mp_const_float_tau MP_OBJ_NEW_CONST_FLOAT(0x40c90fdb)
+#define mp_const_float_inf MP_OBJ_NEW_CONST_FLOAT(0x7f800000)
+#define mp_const_float_nan MP_OBJ_NEW_CONST_FLOAT(0x7fc00000)
+#endif
+
+static inline bool mp_obj_is_float(mp_const_obj_t o) {
+    // Ensure that 32-bit arch can only use single precision.
+    MP_STATIC_ASSERT(sizeof(mp_float_t) <= sizeof(mp_obj_t));
+    return ((mp_int_t)(o)) & 1;
+}
+static inline mp_float_t mp_obj_float_get(mp_const_obj_t o) {
+    union {
+        mp_float_t f;
+        mp_uint_t u;
+    } num = {.u = ((mp_uint_t)o) ^ 1 };
+    return num.f;
+}
+static inline mp_obj_t mp_obj_new_float(mp_float_t f) {
+    union {
+        mp_float_t f;
+        mp_uint_t u;
+    } num = {.f = f};
+    return (mp_obj_t)(num.u | 1); 
+}
 #endif
 
 #endif
@@ -1051,6 +1110,8 @@ static inline bool mp_obj_is_integer(mp_const_obj_t o) {
 }
 
 mp_int_t mp_obj_get_int(mp_const_obj_t arg);
+mp_uint_t mp_obj_get_uint(mp_const_obj_t arg);
+long long mp_obj_get_ll(mp_const_obj_t arg);
 mp_int_t mp_obj_get_int_truncated(mp_const_obj_t arg);
 bool mp_obj_get_int_maybe(mp_const_obj_t arg, mp_int_t *value);
 #if MICROPY_PY_BUILTINS_FLOAT
