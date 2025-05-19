@@ -256,6 +256,10 @@ static mp_obj_t re_search(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(re_search_obj, 2, 4, re_search);
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 static mp_obj_t re_split(size_t n_args, const mp_obj_t *args) {
     mp_obj_re_t *self = MP_OBJ_TO_PTR(args[0]);
     Subject subj;
@@ -500,6 +504,10 @@ const mp_obj_module_t mp_module_re = {
 MP_REGISTER_EXTENSIBLE_MODULE(MP_QSTR_re, mp_module_re);
 #endif
 
+// Yoctopuce specific vvvvvv
+//
+// Include C files explicitely in projects and makefile
+#if !defined(VIRTUAL_HUB) && !defined(TEXAS_API)
 // Source files #include'd here to make sure they're compiled in
 // only if module is enabled by config setting.
 
@@ -515,5 +523,8 @@ MP_REGISTER_EXTENSIBLE_MODULE(MP_QSTR_re, mp_module_re);
 #include "lib/re1.5/dumpcode.c"
 #undef printf
 #endif
+
+#endif
+// Yoctopuce specific ^^^^^^
 
 #endif // MICROPY_PY_RE

@@ -159,9 +159,6 @@ static char *mp_prepend_zeros(char *s, int cnt) {
     return s;
 }
 
-// Helper to convert a decimal mantissa (provided as an mp_large_float_uint_t) to string
-static int mp_format_mantissa(mp_large_float_uint_t mantissa, mp_large_float_uint_t mantissa_cap, char *buf, char *s,
-    int num_digits, int max_exp_zeros, int trailing_zeros, int dec, int e, int fmt_flags) {
 
     DEBUG_PRINTF("mantissa=" MP_FFUINT_FMT " exp=%d (cap=" MP_FFUINT_FMT "):\n", mantissa, e, mantissa_cap);
 
