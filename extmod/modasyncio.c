@@ -28,38 +28,14 @@
 #include "py/smallint.h"
 #include "py/pairheap.h"
 #include "py/mphal.h"
+#include "py/stream.h"
+#include "extmod/modasyncio.h"
+#include "extmod/modselect.h"
 
 #if MICROPY_PY_ASYNCIO
 
 // Used when task cannot be guaranteed to be non-NULL.
 #define TASK_PAIRHEAP(task) ((task) ? &(task)->pairheap : NULL)
-
-#define TASK_STATE_RUNNING_NOT_WAITED_ON (mp_const_true)
-#define TASK_STATE_DONE_NOT_WAITED_ON (mp_const_none)
-#define TASK_STATE_DONE_WAS_WAITED_ON (mp_const_false)
-
-#define TASK_IS_DONE(task) ( \
-    (task)->state == TASK_STATE_DONE_NOT_WAITED_ON \
-    || (task)->state == TASK_STATE_DONE_WAS_WAITED_ON)
-
-typedef struct _mp_obj_task_t {
-    mp_pairheap_t pairheap;
-    mp_obj_t coro;
-    mp_obj_t data;
-    mp_obj_t state;
-    mp_obj_t ph_key;
-} mp_obj_task_t;
-
-typedef struct _mp_obj_task_queue_t {
-    mp_obj_base_t base;
-    mp_obj_task_t *heap;
-    #if MICROPY_PY_ASYNCIO_TASK_QUEUE_PUSH_CALLBACK
-    mp_obj_t push_callback;
-    #endif
-} mp_obj_task_queue_t;
-
-static const mp_obj_type_t task_queue_type;
-static const mp_obj_type_t task_type;
 
 static mp_obj_t task_queue_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args);
 
@@ -100,6 +76,12 @@ static mp_obj_t task_queue_make_new(const mp_obj_type_t *type, size_t n_args, si
     }
     #endif
     return MP_OBJ_FROM_PTR(self);
+}
+
+static void task_queue_print(const mp_print_t* print, mp_obj_t self_in, mp_print_kind_t kind) {
+    (void)kind;
+
+    mp_printf(print, "<task queue %d>", mpy_obj_id(self_in));
 }
 
 static mp_obj_t task_queue_peek(mp_obj_t self_in) {
@@ -159,11 +141,12 @@ static const mp_rom_map_elem_t task_queue_locals_dict_table[] = {
 };
 static MP_DEFINE_CONST_DICT(task_queue_locals_dict, task_queue_locals_dict_table);
 
-static MP_DEFINE_CONST_OBJ_TYPE(
-    task_queue_type,
+MP_DEFINE_CONST_OBJ_TYPE(
+    mp_type_task_queue,
     MP_QSTR_TaskQueue,
     MP_TYPE_FLAG_NONE,
     make_new, task_queue_make_new,
+    print, task_queue_print,
     locals_dict, &task_queue_locals_dict
     );
 
@@ -185,7 +168,23 @@ static mp_obj_t task_make_new(const mp_obj_type_t *type, size_t n_args, size_t n
     if (n_args == 2) {
         mp_asyncio_context = args[1];
     }
+    MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_NEW_TASK);
     return MP_OBJ_FROM_PTR(self);
+}
+
+static void task_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
+    mp_obj_task_t *self = MP_OBJ_TO_PTR(self_in);
+    const char *state;
+    (void)kind;
+
+    if (TASK_IS_DONE(self)) {
+        state = "done";
+    } else if (TASK_IS_EXECUTING(self)) {
+        state = "running";
+    } else {
+        state = "pending";
+    }
+    mp_printf(print, "<task aio%d %s>", mpy_obj_id(self_in), state);
 }
 
 static mp_obj_t task_done(mp_obj_t self_in) {
@@ -206,9 +205,11 @@ static mp_obj_t task_cancel(mp_obj_t self_in) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("can't cancel self"));
     }
     // If Task waits on another task then forward the cancel to the one it's waiting on.
-    while (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(self->data)), MP_OBJ_FROM_PTR(&task_type))) {
+    while (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(mp_obj_get_type(self->data)), MP_OBJ_FROM_PTR(&mp_type_task))) {
+        MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_CANCELLED);
         self = MP_OBJ_TO_PTR(self->data);
     }
+    MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_CANCELLED);
 
     mp_obj_t _task_queue = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR__task_queue));
 
@@ -264,7 +265,14 @@ static void task_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
             self->data = dest[1];
             dest[0] = MP_OBJ_NULL;
         } else if (attr == MP_QSTR_state) {
-            self->state = dest[1];
+            if (!TASK_IS_DONE(self)) {
+                self->state = dest[1];
+                if (TASK_IS_DONE(self)) {
+                    MICROPY_PY_ASYNCIO_TASK_HOOK(self, TASK_HOOK_TASK_DONE);
+                }
+            } else {
+                self->state = dest[1];
+            }
             dest[0] = MP_OBJ_NULL;
         }
     }
@@ -278,8 +286,8 @@ static mp_obj_t task_getiter(mp_obj_t self_in, mp_obj_iter_buf_t *iter_buf) {
         self->state = TASK_STATE_DONE_WAS_WAITED_ON;
     } else if (self->state == TASK_STATE_RUNNING_NOT_WAITED_ON) {
         // Allocate the waiting queue.
-        self->state = task_queue_make_new(&task_queue_type, 0, 0, NULL);
-    } else if (mp_obj_get_type(self->state) != &task_queue_type) {
+        self->state = task_queue_make_new(&mp_type_task_queue, 0, 0, NULL);
+    } else if (mp_obj_get_type(self->state) != &mp_type_task_queue) {
         // Task has state used for another purpose, so can't also wait on it.
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("can't wait"));
     }
@@ -307,13 +315,251 @@ static const mp_getiter_iternext_custom_t task_getiter_iternext = {
     .iternext = task_iternext,
 };
 
-static MP_DEFINE_CONST_OBJ_TYPE(
-    task_type,
+MP_DEFINE_CONST_OBJ_TYPE(
+    mp_type_task,
     MP_QSTR_Task,
     MP_TYPE_FLAG_ITER_IS_CUSTOM,
     make_new, task_make_new,
+    print, task_print,
     attr, task_attr,
     iter, &task_getiter_iternext
+    );
+
+/******************************************************************************/
+// IOQueue class
+
+static mp_obj_t ioqueue_make_new(const mp_obj_type_t *type, size_t n_args, size_t n_kw, const mp_obj_t *args) {
+    mp_arg_check_num(n_args, n_kw, 0, 0, false);
+    mp_obj_ioqueue_t *self = m_new_obj(mp_obj_ioqueue_t);
+    mp_uint_t alloc_items = 8;
+    self->base.type = type;
+    self->poller = mp_select_poll();
+    self->items = m_new(mp_ioqueue_entry_t, alloc_items);
+    self->alloc_items = alloc_items;
+    self->used_items = 0;
+    return MP_OBJ_FROM_PTR(self);
+}
+
+static void ioqueue_enqueue(mp_obj_t self_in, mp_obj_t stream, mp_uint_t idx) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_uint_t used_items = self->used_items;
+    mp_uint_t alloc_items = self->alloc_items;
+    mp_ioqueue_entry_t *end = self->items + used_items;
+    mp_ioqueue_entry_t *scan = self->items;
+    mp_ioqueue_entry_t *emptyEntry = NULL;
+    mp_obj_t *cur_task;
+
+    cur_task = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR_cur_task));
+    while (scan < end && scan->stream != stream) {
+        if (!emptyEntry && !scan->stream) {
+            emptyEntry = scan;
+        }
+        scan++;
+    }
+    if (scan >= end) {
+        if (emptyEntry) {
+            scan = emptyEntry;
+        } else if (used_items < alloc_items) {
+            self->used_items += 1;
+        } else {
+            alloc_items += 4;
+            self->items = m_renew(mp_ioqueue_entry_t, self->items, used_items, alloc_items);
+            self->alloc_items = alloc_items;
+            mp_seq_clear(self->items, used_items, alloc_items, sizeof(mp_ioqueue_entry_t));
+            scan = self->items + used_items;
+            self->used_items += 1;
+        }
+        scan->stream = stream;
+        scan->task_waiting.as_array[idx] = cur_task;
+        scan->task_waiting.as_array[1 - idx] = mp_const_none;
+        mp_obj_t args[3];
+        args[0] = self->poller;
+        args[1] = stream;
+        args[2] = MP_OBJ_NEW_SMALL_INT(!idx ? MP_STREAM_POLL_RD : MP_STREAM_POLL_WR);
+        mp_poll_register(3, args);
+    } else {
+        assert(scan->task_waiting.as_array[idx] == mp_const_none);
+        assert(scan->task_waiting.as_array[1 - idx] != mp_const_none);
+        scan->task_waiting.as_array[idx] = cur_task;
+        mp_poll_modify(self->poller, stream, MP_OBJ_NEW_SMALL_INT(MP_STREAM_POLL_RD | MP_STREAM_POLL_WR));
+    }
+    // Link task to this IOQueue so it can be removed if needed
+    mp_obj_task_t *cur_task_ptr = MP_OBJ_TO_PTR(cur_task);
+    cur_task_ptr->data = self_in;
+}
+
+static mp_obj_t ioqueue_queue_read(mp_obj_t self_in, mp_obj_t stream) {
+    ioqueue_enqueue(self_in, stream, 0);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_queue_read_obj, ioqueue_queue_read);
+
+static mp_obj_t ioqueue_queue_write(mp_obj_t self_in, mp_obj_t stream) {
+    ioqueue_enqueue(self_in, stream, 1);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_queue_write_obj, ioqueue_queue_write);
+
+// dequeue a stream
+static mp_obj_t ioqueue_dequeue(mp_obj_t self_in, mp_obj_t stream) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_uint_t used_items = self->used_items;
+    mp_ioqueue_entry_t *end = self->items + used_items;
+    mp_ioqueue_entry_t *scan = self->items;
+
+    while (scan < end && scan->stream != stream) {
+        scan++;
+    }
+    assert(scan < end);
+    mp_poll_unregister(self->poller, stream);
+    // blank entry
+    memset(scan, 0, sizeof(mp_ioqueue_entry_t));
+    if (scan == end - 1) {
+        // move back end pointer
+        do {
+            used_items--;
+        } while (used_items > 0 && !self->items[used_items - 1].stream);
+        self->used_items = used_items;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_dequeue_obj, ioqueue_dequeue);
+
+// update poll status or remove entry from ioqueue after dequeuing a task
+static void ioqueue_dequeue_ifneeded(mp_obj_t self_in, mp_ioqueue_entry_t *scan) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_obj_t poller = self->poller;
+    mp_obj_t stream = scan->stream;
+
+    if (scan->task_waiting._for.read == mp_const_none) {
+        if (scan->task_waiting._for.write == mp_const_none) {
+            mp_poll_unregister(poller, stream);
+            // blank entry
+            memset(scan, 0, sizeof(mp_ioqueue_entry_t));
+            mp_uint_t used_items = self->used_items;
+            if (scan == self->items + used_items - 1) {
+                // move back end pointer
+                do {
+                    used_items--;
+                } while (used_items > 0 && !self->items[used_items - 1].stream);
+                self->used_items = used_items;
+            }
+        } else {
+            mp_poll_modify(poller, stream, MP_OBJ_NEW_SMALL_INT(MP_STREAM_POLL_WR));
+        }
+    } else {
+        assert(scan->task_waiting._for.write == mp_const_none);
+        mp_poll_modify(poller, stream, MP_OBJ_NEW_SMALL_INT(MP_STREAM_POLL_RD));
+    }
+}
+
+static mp_obj_t ioqueue_remove(mp_obj_t self_in, mp_obj_t task) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_ioqueue_entry_t *scan = self->items;
+
+    while (scan < self->items + self->used_items) {
+        if (scan->stream) {
+            mp_uint_t changed = 0;
+            if (scan->task_waiting._for.read == task) {
+                scan->task_waiting._for.read = mp_const_none;
+                changed = 1;
+            }
+            if (scan->task_waiting._for.write == task) {
+                scan->task_waiting._for.write = mp_const_none;
+                changed = 1;
+            }
+            if (changed) {
+                ioqueue_dequeue_ifneeded(self_in, scan);
+            }
+        }
+        scan++;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_remove_obj, ioqueue_remove);
+
+static mp_obj_t ioqueue_wait_io_event(mp_obj_t self_in, mp_obj_t dt) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    mp_obj_t poller = self->poller;
+    mp_obj_t args[2];
+    mp_obj_t tuple;
+
+    args[0] = poller;
+    args[1] = dt;
+    poller = mp_poll_ipoll(2, args);
+    args[0] = mp_obj_dict_get(mp_asyncio_context, MP_OBJ_NEW_QSTR(MP_QSTR__task_queue));
+    tuple = mp_poll_iternext(poller);
+    while (tuple != MP_OBJ_STOP_ITERATION) {
+        mp_obj_tuple_t *t = MP_OBJ_TO_PTR(tuple);
+        mp_obj_t stream = t->items[0];
+        mp_uint_t flags = mp_obj_get_int(t->items[1]);
+        mp_ioqueue_entry_t *end = self->items + self->used_items;
+        mp_ioqueue_entry_t *scan = self->items;
+        while (scan < end && scan->stream != stream) {
+            scan++;
+        }
+        assert(scan < end);
+        if ((flags & ~MP_STREAM_POLL_WR) != 0 && scan->task_waiting._for.read != mp_const_none) {
+            // POLLIN or error
+            args[1] = scan->task_waiting._for.read;
+            scan->task_waiting._for.read = mp_const_none;
+            task_queue_push(2, args);
+        }
+        if ((flags & ~MP_STREAM_POLL_RD) != 0 && scan->task_waiting._for.write != mp_const_none) {
+            // POLLOUT or error
+            args[1] = scan->task_waiting._for.write;
+            scan->task_waiting._for.write = mp_const_none;
+            task_queue_push(2, args);
+        }
+        ioqueue_dequeue_ifneeded(self_in, scan);
+        tuple = mp_poll_iternext(poller);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(ioqueue_wait_io_event_obj, ioqueue_wait_io_event);
+
+static void ioqueue_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
+    mp_obj_ioqueue_t *self = MP_OBJ_TO_PTR(self_in);
+    if (dest[0] == MP_OBJ_NULL) {
+        // Load
+        if (attr == MP_QSTR_poller) {
+            // poller is a valid attribute, corresponding to the
+            // install returned by select.poll to be used
+            dest[0] = self->poller;
+        } else if (attr == MP_QSTR_map) {
+            // map is a valid attribute, which should evaluate
+            // to True iff there is a task pending I/O
+            dest[0] = (self->used_items ? mp_const_true : mp_const_false);
+        } else {
+            // not an attribute, trigger lookup in locals_dict
+            dest[1] = MP_OBJ_SENTINEL;
+        }
+    } else if (dest[1] != MP_OBJ_NULL) {
+        // Store
+        if (attr == MP_QSTR_poller) {
+            // success
+            self->poller = dest[1];
+            dest[0] = MP_OBJ_NULL;
+        }
+    }
+}
+
+static const mp_rom_map_elem_t ioqueue_locals_dict_table[] = {
+    { MP_ROM_QSTR(MP_QSTR_queue_read), MP_ROM_PTR(&ioqueue_queue_read_obj) },
+    { MP_ROM_QSTR(MP_QSTR_queue_write), MP_ROM_PTR(&ioqueue_queue_write_obj) },
+    { MP_ROM_QSTR(MP_QSTR__dequeue), MP_ROM_PTR(&ioqueue_dequeue_obj) },
+    { MP_ROM_QSTR(MP_QSTR_remove), MP_ROM_PTR(&ioqueue_remove_obj) },
+    { MP_ROM_QSTR(MP_QSTR_wait_io_event), MP_ROM_PTR(&ioqueue_wait_io_event_obj) },
+};
+static MP_DEFINE_CONST_DICT(ioqueue_locals_dict, ioqueue_locals_dict_table);
+
+MP_DEFINE_CONST_OBJ_TYPE(
+    mp_type_ioqueue,
+    MP_QSTR_IOQueue,
+    MP_TYPE_FLAG_NONE,
+    make_new, ioqueue_make_new,
+    attr, ioqueue_attr,
+    locals_dict, &ioqueue_locals_dict
     );
 
 /******************************************************************************/
@@ -321,8 +567,9 @@ static MP_DEFINE_CONST_OBJ_TYPE(
 
 static const mp_rom_map_elem_t mp_module_asyncio_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__asyncio) },
-    { MP_ROM_QSTR(MP_QSTR_TaskQueue), MP_ROM_PTR(&task_queue_type) },
-    { MP_ROM_QSTR(MP_QSTR_Task), MP_ROM_PTR(&task_type) },
+    { MP_ROM_QSTR(MP_QSTR_Task), MP_ROM_PTR(&mp_type_task) },
+    { MP_ROM_QSTR(MP_QSTR_TaskQueue), MP_ROM_PTR(&mp_type_task_queue) },
+    { MP_ROM_QSTR(MP_QSTR_IOQueue), MP_ROM_PTR(&mp_type_ioqueue) },
 };
 static MP_DEFINE_CONST_DICT(mp_module_asyncio_globals, mp_module_asyncio_globals_table);
 

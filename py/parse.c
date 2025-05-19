@@ -240,6 +240,10 @@ typedef struct _parser_t {
     #if MICROPY_COMP_CONST
     mp_map_t consts;
     #endif
+    #if MICROPY_COMP_CONST_MEMBERS
+    qstr class_name;
+    qstr subclass_name;
+    #endif
 } parser_t;
 
 static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id, size_t num_args);
@@ -304,15 +308,30 @@ static void parser_free_parse_node_struct(parser_t *parser, mp_parse_node_struct
 #endif
 
 static void push_rule(parser_t *parser, size_t src_line, uint8_t rule_id, size_t arg_i) {
-    if (parser->rule_stack_top >= parser->rule_stack_alloc) {
+    size_t stack_top = parser->rule_stack_top;
+    if (stack_top >= parser->rule_stack_alloc) {
         rule_stack_t *rs = m_renew(rule_stack_t, parser->rule_stack, parser->rule_stack_alloc, parser->rule_stack_alloc + MICROPY_ALLOC_PARSE_RULE_INC);
         parser->rule_stack = rs;
         parser->rule_stack_alloc += MICROPY_ALLOC_PARSE_RULE_INC;
     }
-    rule_stack_t *rs = &parser->rule_stack[parser->rule_stack_top++];
+    rule_stack_t *rs = &parser->rule_stack[stack_top];
     rs->src_line = src_line;
     rs->rule_id = rule_id;
     rs->arg_i = arg_i;
+    parser->rule_stack_top++;
+    #if MICROPY_COMP_CONST_MEMBERS
+    if (stack_top >= 7 && rule_id == RULE_suite_block_stmts && arg_i == 0 &&
+        parser->rule_stack[stack_top - 3].rule_id == RULE_classdef) {
+        // save current class name
+        mp_parse_node_t pn = parser->result_stack[parser->result_stack_top - 2];
+        assert(MP_PARSE_NODE_IS_ID(pn));
+        if (parser->class_name == MP_QSTRnull) {
+            parser->class_name = MP_PARSE_NODE_LEAF_ARG(pn);
+        } else {
+            parser->subclass_name = MP_PARSE_NODE_LEAF_ARG(pn);
+        }
+    }
+    #endif
 }
 
 static void push_rule_from_arg(parser_t *parser, size_t arg) {
@@ -528,14 +547,14 @@ void mp_parse_node_print(const mp_print_t *print, mp_parse_node_t pn, size_t ind
 }
 #endif // MICROPY_DEBUG_PRINTERS
 
-/*
-static void result_stack_show(const mp_print_t *print, parser_t *parser) {
-    mp_printf(print, "result stack, most recent first\n");
+#if 0
+static void result_stack_show(parser_t *parser) {
+    mp_printf(&mp_stdout_print, "result stack, most recent first\n");
     for (ssize_t i = parser->result_stack_top - 1; i >= 0; i--) {
-        mp_parse_node_print(print, parser->result_stack[i], 0);
+        mp_parse_node_print(&mp_stdout_print, parser->result_stack[i], 0);
     }
 }
-*/
+#endif
 
 static mp_parse_node_t pop_result(parser_t *parser) {
     assert(parser->result_stack_top > 0);
@@ -604,7 +623,8 @@ static void push_result_token(parser_t *parser, uint8_t rule_id) {
         // if name is a standalone identifier, look it up in the table of dynamic constants
         mp_map_elem_t *elem;
         if (rule_id == RULE_atom
-            && (elem = mp_map_lookup(&parser->consts, MP_OBJ_NEW_QSTR(id), MP_MAP_LOOKUP)) != NULL) {
+            && (elem = mp_map_lookup(&parser->consts, MP_OBJ_NEW_QSTR(id), MP_MAP_LOOKUP)) != NULL
+            && !mp_obj_is_type(elem->value, &mp_type_dict)) {
             pn = make_node_const_object_optimised(parser, lex->tok_line, elem->value);
         } else {
             pn = mp_parse_node_new_leaf(MP_PARSE_NODE_ID, id);
@@ -832,6 +852,18 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
 
                 // get the id
                 qstr id = MP_PARSE_NODE_LEAF_ARG(pn0);
+                #if MICROPY_COMP_CONST_MEMBERS
+                qstr member = MP_QSTRnull;
+                qstr submember = MP_QSTRnull;
+                if (parser->subclass_name) {
+                    submember = id;
+                    member = parser->subclass_name;
+                    id = parser->class_name;
+                } else if (parser->class_name) {
+                    member = id;
+                    id = parser->class_name;
+                }
+                #endif
 
                 // get the value
                 mp_parse_node_t pn_value = ((mp_parse_node_struct_t *)((mp_parse_node_struct_t *)pn1)->nodes[1])->nodes[0];
@@ -846,7 +878,27 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
 
                 // store the value in the table of dynamic constants
                 mp_map_elem_t *elem = mp_map_lookup(&parser->consts, MP_OBJ_NEW_QSTR(id), MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
-                assert(elem->value == MP_OBJ_NULL);
+                #if MICROPY_COMP_CONST_MEMBERS
+                if (member != MP_QSTRnull) {
+                    id = member;
+                    if (elem->value == MP_OBJ_NULL) {
+                        elem->value = mp_obj_new_dict(0);
+                    }
+                    assert(mp_obj_is_type(elem->value, &mp_type_dict));
+                    mp_map_t *map = mp_obj_dict_get_map(elem->value);
+                    elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(id), MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
+                    if (submember != MP_QSTRnull) {
+                        id = submember;
+                        if (elem->value == MP_OBJ_NULL) {
+                            elem->value = mp_obj_new_dict(0);
+                        }
+                        assert(mp_obj_is_type(elem->value, &mp_type_dict));
+                        mp_map_t* map = mp_obj_dict_get_map(elem->value);
+                        elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(id), MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
+                    }
+                }
+                #endif
+                assert(elem->value == MP_OBJ_NULL || elem->value == value);
                 elem->value = value;
 
                 // If the constant starts with an underscore then treat it as a private
@@ -869,32 +921,101 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
         return false;
     #endif
 
-    #if MICROPY_COMP_MODULE_CONST
+    #if MICROPY_COMP_MODULE_CONST || MICROPY_COMP_SYSNAME_CONST || MICROPY_COMP_CONST_MEMBERS
     } else if (rule_id == RULE_atom_expr_normal) {
         mp_parse_node_t pn0 = peek_result(parser, 1);
         mp_parse_node_t pn1 = peek_result(parser, 0);
-        if (!(MP_PARSE_NODE_IS_ID(pn0)
-              && MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_trailer_period))) {
+        if (!MP_PARSE_NODE_IS_ID(pn0)) {
             return false;
         }
-        // id1.id2
-        // look it up in constant table, see if it can be replaced with an integer or a float
-        mp_parse_node_struct_t *pns1 = (mp_parse_node_struct_t *)pn1;
-        assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
         qstr q_base = MP_PARSE_NODE_LEAF_ARG(pn0);
-        qstr q_attr = MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]);
-        mp_map_elem_t *elem = mp_map_lookup((mp_map_t *)&mp_constants_map, MP_OBJ_NEW_QSTR(q_base), MP_MAP_LOOKUP);
-        if (elem == NULL) {
+        #if MICROPY_COMP_SYSNAME_CONST
+        if (q_base == MP_QSTR_sys && MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_atom_expr_trailers)) {
+            mp_parse_node_struct_t *pns = (mp_parse_node_struct_t *)pn1;
+            if (MP_PARSE_NODE_STRUCT_NUM_NODES(pns) != 2 ||
+                !MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], RULE_trailer_period) ||
+                !MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[1], RULE_trailer_period)) {
+                return false;
+            }
+            mp_parse_node_struct_t *pns0 = (mp_parse_node_struct_t *)(pns->nodes[0]);
+            mp_parse_node_struct_t *pns1 = (mp_parse_node_struct_t *)(pns->nodes[1]);
+            assert(MP_PARSE_NODE_IS_ID(pns0->nodes[0]));
+            assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
+            if (MP_PARSE_NODE_LEAF_ARG(pns0->nodes[0]) != MP_QSTR_implementation ||
+                MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]) != MP_QSTR_name) {
+                return false;
+            }
+            for (size_t i = num_args; i > 0; i--) {
+                pop_result(parser);
+            }
+            push_result_node(parser, mp_parse_node_new_leaf(MP_PARSE_NODE_STRING, MP_QSTR_micropython));
+            return true;
+        }
+        #endif
+        if (MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_trailer_period) || MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_atom_expr_trailers)) {
+            // id1.id2[.id3]
+            mp_parse_node_struct_t *pns1 = (mp_parse_node_struct_t *)pn1;
+            qstr q_attr = MP_QSTRnull;
+            qstr q_sub = MP_QSTRnull;
+            if (MP_PARSE_NODE_STRUCT_KIND(pns1) == RULE_trailer_period) {
+                assert(MP_PARSE_NODE_IS_ID(pns1->nodes[0]));
+                q_attr = MP_PARSE_NODE_LEAF_ARG(pns1->nodes[0]);
+            } else {
+                if (MP_PARSE_NODE_STRUCT_NUM_NODES(pns1) != 2 ||
+                    !MP_PARSE_NODE_IS_STRUCT_KIND(pns1->nodes[0], RULE_trailer_period) ||
+                    !MP_PARSE_NODE_IS_STRUCT_KIND(pns1->nodes[1], RULE_trailer_period)) {
+                    return false;
+                }
+                mp_parse_node_struct_t *pns2 = (mp_parse_node_struct_t*)pns1->nodes[0];
+                mp_parse_node_struct_t* pns3 = (mp_parse_node_struct_t*)pns1->nodes[1];
+                assert(MP_PARSE_NODE_IS_ID(pns2->nodes[0]));
+                assert(MP_PARSE_NODE_IS_ID(pns3->nodes[0]));
+                q_attr = MP_PARSE_NODE_LEAF_ARG(pns2->nodes[0]);
+                q_sub = MP_PARSE_NODE_LEAF_ARG(pns3->nodes[0]);
+            }
+            mp_map_elem_t *elem = NULL;
+            arg0 = MP_OBJ_NULL;
+            #if MICROPY_COMP_MODULE_CONST
+            // look it up in modules constant table, see if it can be replaced with a constant
+            elem = mp_map_lookup((mp_map_t *)&mp_constants_map, MP_OBJ_NEW_QSTR(q_base), MP_MAP_LOOKUP);
+            if (elem != NULL && q_sub == MP_QSTRnull) {
+                mp_obj_t dest[2];
+                mp_load_method_maybe(elem->value, q_attr, dest);
+                if (!(dest[0] != MP_OBJ_NULL && (mp_obj_is_int(dest[0]) || mp_obj_is_float(dest[0])) && dest[1] == MP_OBJ_NULL)) {
+                    return false;
+                }
+                arg0 = dest[0];
+            }
+            #endif
+            #if MICROPY_COMP_CONST_MEMBERS
+            if (elem == NULL) {
+                // fallback to look-up in our compile-time class constants dictionary
+                elem = mp_map_lookup(&parser->consts, MP_OBJ_NEW_QSTR(q_base), MP_MAP_LOOKUP);
+                if (elem != NULL) {
+                    assert(mp_obj_is_type(elem->value, &mp_type_dict));
+                    mp_map_t *map = mp_obj_dict_get_map(elem->value);
+                    elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(q_attr), MP_MAP_LOOKUP);
+                    if (elem != NULL) {
+                        if (q_sub == MP_QSTRnull) {
+                            arg0 = elem->value;
+                        } else if (mp_obj_is_type(elem->value, &mp_type_dict)) {
+                            map = mp_obj_dict_get_map(elem->value);
+                            elem = mp_map_lookup(map, MP_OBJ_NEW_QSTR(q_sub), MP_MAP_LOOKUP);
+                            if (elem != NULL) {
+                                arg0 = elem->value;
+                            }
+                        }
+                    }
+                }
+            }
+            #endif
+            if (elem == NULL) {
+                return false;
+            }
+        } else {
             return false;
         }
-        mp_obj_t dest[2];
-        mp_load_method_maybe(elem->value, q_attr, dest);
-        if (!(dest[0] != MP_OBJ_NULL && (mp_obj_is_int(dest[0]) || mp_obj_is_float(dest[0])) && dest[1] == MP_OBJ_NULL)) {
-            return false;
-        }
-        arg0 = dest[0];
     #endif
-
     } else {
         return false;
     }
@@ -910,6 +1031,97 @@ static bool fold_constants(parser_t *parser, uint8_t rule_id, size_t num_args) {
 }
 
 #endif // MICROPY_COMP_CONST_FOLDING
+
+#if MICROPY_COMP_COMPAR_FOLDING
+
+static bool fold_comparisons(parser_t *parser, uint8_t rule_id, size_t *num_args) {
+    // this code does folding of relational comparisons between const values
+    // in case of chained comparisons, folding starts from the right until no more foldable
+    if (rule_id != RULE_comparison) {
+        return false;
+    }
+    mp_parse_node_t pn = peek_result(parser, 0);
+    if (!mp_parse_node_is_const(pn)) {
+        return false;
+    }
+    mp_obj_t lhs, rhs = mp_parse_node_convert_to_obj(pn);
+    while (*num_args >= 3) {
+        pn = peek_result(parser, 2);
+        if (!mp_parse_node_is_const(pn)) {
+            return false;
+        }
+        lhs = mp_parse_node_convert_to_obj(pn);
+        mp_token_kind_t tok = MP_PARSE_NODE_LEAF_ARG(peek_result(parser, 1));
+        if (tok < MP_TOKEN_OP_LESS || tok > MP_TOKEN_OP_NOT_EQUAL) {
+            return false;
+        }
+        mp_binary_op_t op = MP_BINARY_OP_LESS + (tok - MP_TOKEN_OP_LESS);
+        mp_obj_t res;
+        if (!binary_op_maybe(op, lhs, rhs, &res)) {
+            return false;
+        }
+        if (res == mp_const_false) {
+            // one comparison failed => the chain is false
+            for (size_t i = *num_args; i > 0; i--) {
+                pop_result(parser);
+            }
+            push_result_node(parser, mp_parse_node_new_leaf(MP_PARSE_NODE_TOKEN, MP_TOKEN_KW_FALSE));
+            return true;
+        }
+        // comparison successful, reduce chain
+        rhs = lhs;
+        pop_result(parser);
+        pop_result(parser);
+        *num_args -= 2;
+    }
+    // chain fully reduced => relational comparison is true
+    assert(*num_args == 1);
+    pop_result(parser);
+    push_result_node(parser, mp_parse_node_new_leaf(MP_PARSE_NODE_TOKEN, MP_TOKEN_KW_TRUE));
+
+    return true;
+}
+#endif // MICROPY_COMP_COMPAR_FOLDING
+
+#if MICROPY_COMP_DROP_TYPING_CAST
+static bool fold_cast(parser_t* parser, uint8_t rule_id, size_t num_args) {
+    // this code does folding of cast expressions, eg typing.cast('str',x) => x
+    if (rule_id != RULE_atom_expr_normal || num_args != 2) {
+        return false;
+    }
+    mp_parse_node_t pn0 = peek_result(parser, 1);
+    mp_parse_node_t pn1 = peek_result(parser, 0);
+    if (!MP_PARSE_NODE_IS_ID(pn0) || MP_PARSE_NODE_LEAF_ARG(pn0) != MP_QSTR_typing) {
+        return false;
+    }
+    if (!MP_PARSE_NODE_IS_STRUCT_KIND(pn1, RULE_atom_expr_trailers)) {
+        return false;
+    }
+    mp_parse_node_struct_t* pns = (mp_parse_node_struct_t*)pn1;
+    if (MP_PARSE_NODE_STRUCT_NUM_NODES(pns) != 2 ||
+        !MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[0], RULE_trailer_period) ||
+        !MP_PARSE_NODE_IS_STRUCT_KIND(pns->nodes[1], RULE_trailer_paren)) {
+        return false;
+    }
+    mp_parse_node_struct_t* pns0 = (mp_parse_node_struct_t*)(pns->nodes[0]);
+    mp_parse_node_struct_t* pns1 = (mp_parse_node_struct_t*)(pns->nodes[1]);
+    if (!MP_PARSE_NODE_IS_ID(pns0->nodes[0]) || MP_PARSE_NODE_LEAF_ARG(pns0->nodes[0]) != MP_QSTR_cast) {
+        return false;
+    }
+    if (MP_PARSE_NODE_STRUCT_NUM_NODES(pns1) != 1 || !MP_PARSE_NODE_IS_STRUCT_KIND(pns1->nodes[0], RULE_arglist)) {
+        return false;
+    }
+    pns1 = (mp_parse_node_struct_t*)(pns1->nodes[0]);
+    if (MP_PARSE_NODE_STRUCT_NUM_NODES(pns1) != 2) {
+        return false;
+    }
+    pn1 = pns1->nodes[1];
+    pop_result(parser); // pop cast(type, x)
+    pop_result(parser); // pop 'typing'
+    push_result_node(parser, pn1); // push back x
+    return true;
+}
+#endif
 
 #if MICROPY_COMP_CONST_TUPLE
 static bool build_tuple_from_stack(parser_t *parser, size_t src_line, size_t num_args) {
@@ -1008,6 +1220,16 @@ static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id,
         // steal first arg of outer testlist_comp rule
         ++num_args;
     }
+    #if MICROPY_COMP_CONST_MEMBERS
+    else if (rule_id == RULE_classdef) {
+        // class definition complete, pop const() bindings again
+        if (parser->subclass_name != MP_QSTRnull) {
+            parser->subclass_name = MP_QSTRnull;
+        } else {
+            parser->class_name = MP_QSTRnull;
+        }       
+    }
+    #endif
 
     #if MICROPY_COMP_CONST_FOLDING
     if (fold_logical_constants(parser, rule_id, &num_args)) {
@@ -1016,6 +1238,20 @@ static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id,
     }
     if (fold_constants(parser, rule_id, num_args)) {
         // we folded this rule so return straight away
+        return;
+    }
+    #endif
+
+    #if MICROPY_COMP_COMPAR_FOLDING
+    if (fold_comparisons(parser, rule_id, &num_args)) {
+        // we folded this rule so return straight away
+        return;
+    }
+    #endif
+
+    #if MICROPY_COMP_DROP_TYPING_CAST
+    if (fold_cast(parser, rule_id, num_args)) {
+        // we folded this cast so return straight away
         return;
     }
     #endif
@@ -1040,7 +1276,12 @@ static void push_result_rule(parser_t *parser, size_t src_line, uint8_t rule_id,
     push_result_node(parser, (mp_parse_node_t)pn);
 }
 
-mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind) {
+#if MICROPY_COMP_PREDEFINED_CONST
+mp_parse_tree_t mp_parse_ex(mp_lexer_t *lex, mp_parse_input_kind_t input_kind, mp_obj_t *new_const_dict)
+#else
+mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind)
+#endif
+{
     // Set exception handler to free the lexer if an exception is raised.
     MP_DEFINE_NLR_JUMP_CALLBACK_FUNCTION_1(ctx, mp_lexer_free, lex);
     nlr_push_jump_callback(&ctx.callback, mp_call_function_1_from_nlr_jump_callback);
@@ -1064,6 +1305,29 @@ mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind) {
 
     #if MICROPY_COMP_CONST
     mp_map_init(&parser.consts, 0);
+    #endif
+    #if MICROPY_COMP_PREDEFINED_CONST
+    mp_obj_t dict_obj = MP_STATE_VM(predefined_const);
+    if (mp_obj_is_dict_or_ordereddict(dict_obj)) {
+        mp_map_t *map = &((mp_obj_dict_t *)MP_OBJ_TO_PTR(dict_obj))->map;
+        size_t i, n = map->alloc;
+        for (i = 0; i < n; i++) {
+            if (mp_map_slot_is_filled(map, i)) {
+                mp_map_elem_t *predef = &map->table[i];
+                mp_map_elem_t *elem = mp_map_lookup(&parser.consts, predef->key, MP_MAP_LOOKUP_ADD_IF_NOT_FOUND);
+                if (mp_obj_is_dict_or_ordereddict(predef->value)) {
+                    elem->value = mp_obj_dict_copy(predef->value);
+                } else {
+                    elem->value = predef->value;
+                }
+            }
+        }
+    }
+    #endif
+
+    #if MICROPY_COMP_CONST_MEMBERS
+    parser.class_name = MP_QSTRnull;
+    parser.subclass_name = MP_QSTRnull;
     #endif
 
     // work out the top-level rule to use, and push it on the stack
@@ -1187,8 +1451,10 @@ mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind) {
 
                 // matched the rule, so now build the corresponding parse_node
 
-                #if !MICROPY_ENABLE_DOC_STRING
-                // this code discards lonely statements, such as doc strings
+                #if !MICROPY_ENABLE_DOC_STRING && !MICROPY_COMP_ADD_METADATA
+                // This code discards lonely statements, such as doc strings, to reclaim memory early.
+                // Doc strings will be discarded at compilation anyway if not enabled, but if we need
+                // to save meta-data in mpy files, we want to preserve the module initial doc string
                 if (input_kind != MP_PARSE_SINGLE_INPUT && rule_id == RULE_expr_stmt && peek_result(&parser, 0) == MP_PARSE_NODE_NULL) {
                     mp_parse_node_t p = peek_result(&parser, 1);
                     if ((MP_PARSE_NODE_IS_LEAF(p) && !MP_PARSE_NODE_IS_ID(p))
@@ -1198,6 +1464,18 @@ mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind) {
                         // Pushing the "pass" rule here will overwrite any RULE_const_object
                         // entry that was on the result stack, allowing the GC to reclaim
                         // the memory from the const object when needed.
+                        push_result_rule(&parser, rule_src_line, RULE_pass_stmt, 0);
+                        break;
+                    }
+                }
+                #endif
+
+                #if MICROPY_COMP_DROP_FUTURE_IMPORT
+                if (rule_id == RULE_import_from) {
+                    mp_parse_node_t p = peek_result(&parser, 1);
+                    if (MP_PARSE_NODE_IS_ID(p) && MP_PARSE_NODE_LEAF_ARG(p) == MP_QSTR___future__) {
+                        pop_result(&parser); // import_as_name
+                        pop_result(&parser); // id(__future__)
                         push_result_rule(&parser, rule_src_line, RULE_pass_stmt, 0);
                         break;
                     }
@@ -1338,7 +1616,16 @@ mp_parse_tree_t mp_parse(mp_lexer_t *lex, mp_parse_input_kind_t input_kind) {
         }
     }
 
-    #if MICROPY_COMP_CONST
+    #if MICROPY_COMP_PREDEFINED_CONST
+    if (new_const_dict) {
+        mp_obj_dict_t *dict = MP_OBJ_TO_PTR(mp_obj_new_dict(0));
+        dict->map = parser.consts;
+        *new_const_dict = MP_OBJ_FROM_PTR(dict);
+        memset(&parser.consts, 0, sizeof(parser.consts));
+    } else {
+        mp_map_deinit(&parser.consts);
+    }
+    #elif MICROPY_COMP_CONST
     mp_map_deinit(&parser.consts);
     #endif
 
