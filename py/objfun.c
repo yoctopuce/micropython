@@ -252,6 +252,11 @@ mp_code_state_t *mp_obj_fun_bc_prepare_codestate(mp_obj_t self_in, size_t n_args
 }
 #endif
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     mp_cstack_check();
 
@@ -352,6 +357,10 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const 
         nlr_raise(result);
     }
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 #if MICROPY_PY_FUNCTION_ATTRS
 void mp_obj_fun_bc_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
