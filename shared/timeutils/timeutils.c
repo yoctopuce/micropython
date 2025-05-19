@@ -42,7 +42,7 @@
 #define PREV_LEAP_YEAR 1968
 
 // On ports where either MICROPY_TIME_SUPPORT_Y2100_AND_BEYOND or
-// MICROPY_TIME_SUPPORT_Y1969_AND_BEFORE is enabled, we include extra
+// MICROPY_TIME_SUPPORT_Y1969_AND_BEFORE is enabled, we include extra 
 // code to support leap years outside of the 'easy' period.
 // Computation is then made based on 1600 (a mod-400 year).
 // This is the number of days between 1600 and 1968.

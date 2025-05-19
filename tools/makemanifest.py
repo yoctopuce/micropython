@@ -132,6 +132,7 @@ def main():
     )
     cmd_parser.add_argument("-o", "--output", help="output path")
     cmd_parser.add_argument("-b", "--build-dir", help="output path")
+    cmd_parser.add_argument("-m", "--meta-file", help="create meta-data file")
     cmd_parser.add_argument(
         "-f", "--mpy-cross-flags", default="", help="flags to pass to mpy-cross"
     )
@@ -263,6 +264,19 @@ def main():
         f.write(output_str)
         f.write(b"//\n// Content for MICROPY_MODULE_FROZEN_MPY\n//\n")
         f.write(output_mpy)
+
+    # Create file with meta-data if requested
+    if args.meta_file:
+        output_meta = {}
+        res, output_meta = system([ sys.executable, MPY_TOOL, "--info" ] + mpy_files)
+        if res == 0:
+            print("GEN", args.meta_file)
+            mkdir(args.meta_file)
+            with open(args.meta_file, "wb") as f:
+                f.write(output_meta)
+        else:
+            print("error loading meta-data from {}:".format(mpy_files))
+            sys.exit(1)
 
 
 if __name__ == "__main__":
