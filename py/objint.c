@@ -122,7 +122,7 @@ static mp_fp_as_int_class_t mp_classify_fp_as_int(mp_float_t val) {
         return MP_FP_CLASS_FIT_SMALLINT;
     }
     #else
-    if (e <= ((8 * sizeof(uintptr_t) + MP_FLOAT_EXP_BIAS - 3) << MP_FLOAT_EXP_SHIFT_I32)) {
+    if (e <= ((MP_SMALL_INT_BITS + MP_FLOAT_EXP_BIAS - 2) << MP_FLOAT_EXP_SHIFT_I32)) {
         return MP_FP_CLASS_FIT_SMALLINT;
     }
     #endif
