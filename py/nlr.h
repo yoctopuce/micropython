@@ -30,7 +30,8 @@
 // exception handling, basically a stack of setjmp/longjmp buffers
 
 #include <limits.h>
-#include <assert.h>
+// Yoctopuce - should not include assert.h everywhere !
+// #include <assert.h>
 #include <stdbool.h>
 
 #include "py/mpconfig.h"

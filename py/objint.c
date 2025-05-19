@@ -115,9 +115,7 @@ static mp_fp_as_int_class_t mp_classify_fp_as_int(mp_float_t val) {
     } else {
         e &= ~((1U << MP_FLOAT_EXP_SHIFT_I32) - 1);
     }
-    // 8 * sizeof(uintptr_t) counts the number of bits for a small int
-    // TODO provide a way to configure this properly
-    if (e <= ((8 * sizeof(uintptr_t) + MP_FLOAT_EXP_BIAS - 3) << MP_FLOAT_EXP_SHIFT_I32)) {
+    if (e <= ((MP_SMALL_INT_BITS + MP_FLOAT_EXP_BIAS - 2) << MP_FLOAT_EXP_SHIFT_I32)) {
         return MP_FP_CLASS_FIT_SMALLINT;
     }
     #if MICROPY_LONGINT_IMPL == MICROPY_LONGINT_IMPL_LONGLONG

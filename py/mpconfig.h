@@ -85,8 +85,14 @@
 // Enable everything (e.g. coverage)
 #define MICROPY_CONFIG_ROM_LEVEL_EVERYTHING (50)
 
-#ifdef MP_CONFIGFILE
+#if defined(MP_CONFIGFILE)
 #include MP_CONFIGFILE
+#elif defined(VIRTUAL_HUB) || defined(TEXAS_API)
+// Yoctopuce specific vvvvvv
+//
+// Use a specific filename for our setting file, to avoid confusion with the multiple mpconfig files in mpy tree
+#include <mpylink/ympconfig.h>
+// Yoctopuce specific ^^^^^^
 #else
 #include <mpconfigport.h>
 #endif
@@ -469,6 +475,11 @@
 #define MICROPY_COMP_CONST_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable relational comparison folding; eg prune statements like if _DEBUG_LEVEL > 3
+#ifndef MICROPY_COMP_COMPAR_FOLDING
+#define MICROPY_COMP_COMPAR_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to compile constant tuples immediately to their respective objects; eg (1, True)
 // Otherwise the tuple will be built at runtime
 #ifndef MICROPY_COMP_CONST_TUPLE
@@ -478,6 +489,11 @@
 // Whether to enable optimisations for constant literals, eg OrderedDict
 #ifndef MICROPY_COMP_CONST_LITERAL
 #define MICROPY_COMP_CONST_LITERAL (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to handle sys.implementation.name as a compile time constant
+#ifndef MICROPY_COMP_SYSNAME_CONST
+#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 // Whether to enable lookup of constants in modules; eg module.CONST
@@ -497,6 +513,16 @@
 #define MICROPY_COMP_CONST_FLOAT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable class constants; class MyClass: FLAG = const(1)
+#ifndef MICROPY_COMP_CONST_MEMBERS
+#define MICROPY_COMP_CONST_MEMBERS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to enable preloading compile-time constants from an include file
+#ifndef MICROPY_COMP_PREDEFINED_CONST
+#define MICROPY_COMP_PREDEFINED_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to enable optimisation of: a, b = c, d
 // Costs 124 bytes (Thumb2)
 #ifndef MICROPY_COMP_DOUBLE_TUPLE_ASSIGN
@@ -513,6 +539,21 @@
 // Costs about 80 bytes (Thumb2) and saves 2 bytes of bytecode for each use
 #ifndef MICROPY_COMP_RETURN_IF_EXPR
 #define MICROPY_COMP_RETURN_IF_EXPR (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether to parse module docstring to add metadata to .mpy files
+#ifndef MICROPY_COMP_ADD_METADATA
+#define MICROPY_COMP_ADD_METADATA (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to prune __future__ imports at compile time
+#ifndef MICROPY_COMP_DROP_FUTURE_IMPORT
+#define MICROPY_COMP_DROP_FUTURE_IMPORT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to drop typing.cast() expressions at compile time
+#ifndef MICROPY_COMP_DROP_TYPING_CAST
+#define MICROPY_COMP_DROP_TYPING_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 /*****************************************************************************/
@@ -1287,6 +1328,21 @@ typedef time_t mp_timestamp_t;
 #define MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
+// Whether to support memoryview.cast method
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether to support memoryview.tobytes method
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_TOBYTES
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_TOBYTES (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether to support memoryview.find method (non-standard extension)
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_FIND
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_FIND (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
 // Whether to support set object
 #ifndef MICROPY_PY_BUILTINS_SET
 #define MICROPY_PY_BUILTINS_SET (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
@@ -1651,6 +1707,11 @@ typedef time_t mp_timestamp_t;
 #define MICROPY_PY_SYS_EXIT (1)
 #endif
 
+// Whether to provide "sys.watchdog" function (Yoctopuce extension)
+#ifndef MICROPY_PY_SYS_WATCHDOG
+#define MICROPY_PY_SYS_WATCHDOG (0)
+#endif
+
 // Whether to provide "sys.atexit" function (MicroPython extension)
 #ifndef MICROPY_PY_SYS_ATEXIT
 #define MICROPY_PY_SYS_ATEXIT (0)
@@ -1821,6 +1882,12 @@ typedef time_t mp_timestamp_t;
 // Whether to support the "separators" argument to dump, dumps
 #ifndef MICROPY_PY_JSON_SEPARATORS
 #define MICROPY_PY_JSON_SEPARATORS (1)
+#endif
+
+// Whether to preserve key order by default when parsing json
+// (CPython dict preserve order since 3.6)
+#ifndef MICROPY_PY_JSON_ORDEREDDICT
+#define MICROPY_PY_JSON_ORDEREDDICT (MICROPY_CPYTHON_COMPAT)
 #endif
 
 #ifndef MICROPY_PY_OS
