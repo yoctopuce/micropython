@@ -287,6 +287,10 @@ void mp_obj_exception_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
         // These are aliases for args[0]: .value for StopIteration and .errno for OSError.
         // For efficiency let these attributes apply to all exception instances.
         dest[0] = mp_obj_exception_get_value(self_in);
+#if MICROPY_PY_ERRNO
+    } else if (attr == MP_QSTR_strerror) {
+        dest[0] = MP_OBJ_NEW_QSTR(mp_errno_to_str(mp_obj_exception_get_value(self_in)));
+#endif
     }
 }
 

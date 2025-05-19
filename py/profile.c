@@ -37,51 +37,63 @@
 #error "MICROPY_PY_SYS_SETTRACE requires MICROPY_PERSISTENT_CODE_SAVE to be enabled"
 #endif
 
+#if MICROPY_PY_SYS_SETTRACE == 1
 #define prof_trace_cb MP_STATE_THREAD(prof_trace_callback)
+#elif MICROPY_PY_SYS_SETTRACE == 2
+#define prof_trace_enabled MP_STATE_THREAD(prof_systrace_enabled)
+#endif
+
+#define QSTR_MAP(context, idx) (context->constants.qstr_table[idx])
 
 uint mp_prof_bytecode_lineno(const mp_raw_code_t *rc, size_t bc) {
-    const mp_bytecode_prelude_t *prelude = &rc->prelude;
-    return mp_bytecode_get_source_line(prelude->line_info, prelude->line_info_top, bc);
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
+    return mp_bytecode_get_source_line(settrace_data->line_info, settrace_data->line_info_top, bc);
 }
 
-void mp_prof_extract_prelude(const byte *bytecode, mp_bytecode_prelude_t *prelude) {
+void mp_prof_extract_prelude(const byte *bytecode, mp_prof_settrace_data_t *settrace_data) {
     const byte *ip = bytecode;
 
     MP_BC_PRELUDE_SIG_DECODE(ip);
-    prelude->n_state = n_state;
-    prelude->n_exc_stack = n_exc_stack;
-    prelude->scope_flags = scope_flags;
-    prelude->n_pos_args = n_pos_args;
-    prelude->n_kwonly_args = n_kwonly_args;
-    prelude->n_def_pos_args = n_def_pos_args;
+    #if MICROPY_PY_SYS_SETTRACE_USE_FULL_PRELUDE
+    settrace_data->n_state = n_state;
+    settrace_data->n_exc_stack = n_exc_stack;
+    settrace_data->scope_flags = scope_flags;
+    settrace_data->n_pos_args = n_pos_args;
+    settrace_data->n_kwonly_args = n_kwonly_args;
+    settrace_data->n_def_pos_args = n_def_pos_args;
+    #else
+    settrace_data->n_args = n_pos_args + n_kwonly_args;
+    #endif
 
     MP_BC_PRELUDE_SIZE_DECODE(ip);
 
-    prelude->line_info_top = ip + n_info;
-    prelude->opcodes = ip + n_info + n_cell;
+    settrace_data->line_info_top = ip + n_info;
+    settrace_data->opcodes = ip + n_info + n_cell;
 
-    prelude->qstr_block_name_idx = mp_decode_uint_value(ip);
+    settrace_data->qstr_block_name_idx = mp_decode_uint_value(ip);
     for (size_t i = 0; i < 1 + n_pos_args + n_kwonly_args; ++i) {
         ip = mp_decode_uint_skip(ip);
     }
-    prelude->line_info = ip;
+    settrace_data->line_info = ip;
 }
 
 /******************************************************************************/
 // frame object
+
+#if MICROPY_PY_SYS_SETTRACE == 1
 
 static void frame_print(const mp_print_t *print, mp_obj_t o_in, mp_print_kind_t kind) {
     (void)kind;
     mp_obj_frame_t *frame = MP_OBJ_TO_PTR(o_in);
     mp_obj_code_t *code = frame->code;
     const mp_raw_code_t *rc = code->rc;
-    const mp_bytecode_prelude_t *prelude = &rc->prelude;
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
     mp_printf(print,
         "<frame at 0x%p, file '%q', line %d, code %q>",
         frame,
         MP_CODE_QSTR_MAP(code->context, 0),
         (int)frame->lineno,
-        MP_CODE_QSTR_MAP(code->context, prelude->qstr_block_name_idx)
+        MP_CODE_QSTR_MAP(code->context, settrace_data->qstr_block_name_idx)
         );
 }
 
@@ -100,11 +112,16 @@ static void frame_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
                 dest[0] = MP_OBJ_FROM_PTR(o->code_state->prev_state->frame);
             }
             break;
+        #if MICROPY_PY_SYS_SETTRACE == 1
         case MP_QSTR_f_code:
             dest[0] = MP_OBJ_FROM_PTR(o->code);
             break;
+        #endif
         case MP_QSTR_f_globals:
-            dest[0] = MP_OBJ_FROM_PTR(o->code_state->fun_bc->context->module.globals);
+            ;
+            mp_obj_fun_bc_t *fun_bc = o->code_state->fun_obj;
+            assert(fun_bc->base.type == &mp_type_fun_bc || fun_bc->base.type == &mp_type_gen_wrap);
+            dest[0] = MP_OBJ_FROM_PTR(fun_bc->context->module.globals);
             break;
         case MP_QSTR_f_lasti:
             dest[0] = MP_OBJ_NEW_SMALL_INT(o->lasti);
@@ -133,18 +150,20 @@ mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state) {
         return MP_OBJ_NULL;
     }
 
-    mp_obj_code_t *code = o->code = MP_OBJ_TO_PTR(mp_obj_new_code(code_state->fun_bc->context, code_state->fun_bc->rc, false));
+    mp_obj_fun_bc_t *fun_bc = code_state->fun_obj;
+    assert(fun_bc->base.type == &mp_type_fun_bc || fun_bc->base.type == &mp_type_gen_wrap);
+    mp_obj_code_t *code = o->code = MP_OBJ_TO_PTR(mp_obj_new_code(fun_bc->context, fun_bc->rc, false));
     if (code == NULL) {
         return MP_OBJ_NULL;
     }
 
     const mp_raw_code_t *rc = code->rc;
-    const mp_bytecode_prelude_t *prelude = &rc->prelude;
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
     o->code_state = code_state;
     o->base.type = &mp_type_frame;
     o->back = NULL;
     o->code = code;
-    o->lasti = code_state->ip - prelude->opcodes;
+    o->lasti = code_state->ip - settrace_data->opcodes;
     o->lineno = mp_prof_bytecode_lineno(rc, o->lasti);
     o->trace_opcodes = false;
     o->callback = MP_OBJ_NULL;
@@ -152,9 +171,32 @@ mp_obj_t mp_obj_new_frame(const mp_code_state_t *code_state) {
     return MP_OBJ_FROM_PTR(o);
 }
 
+#elif MICROPY_PY_SYS_SETTRACE == 2
+
+mp_frame_t *mp_new_frame(const mp_code_state_t *code_state) {
+    if (gc_is_locked()) {
+        return MP_OBJ_NULL;
+    }
+    mp_frame_t *o = m_new_maybe(mp_frame_t, 1);
+    if (o == NULL) {
+        return MP_OBJ_NULL;
+    }
+    const mp_obj_fun_bc_t *fun_bc = code_state->fun_obj;
+    const mp_raw_code_t *rc = fun_bc->rc;
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
+    o->startTicks = mp_hal_ticks_ms();
+    o->code_state = code_state;
+    o->lasti = code_state->ip - settrace_data->opcodes;
+    o->lineno = mp_prof_bytecode_lineno(rc, o->lasti);
+    return o;
+}
+
+#endif
 
 /******************************************************************************/
 // Trace logic
+
+#if MICROPY_PY_SYS_SETTRACE == 1
 
 typedef struct {
     struct _mp_obj_frame_t *frame;
@@ -187,7 +229,23 @@ mp_obj_t mp_prof_settrace(mp_obj_t callback) {
     return mp_const_none;
 }
 
+#elif MICROPY_PY_SYS_SETTRACE == 2
+
+mp_obj_t mp_prof_settrace(mp_obj_t enable) {
+    if (enable == mp_const_true) {
+        prof_trace_enabled = true;
+    } else if (enable == mp_const_false) {
+        prof_trace_enabled = false;
+    } else {
+        mp_raise_ValueError(MP_ERROR_TEXT("bool expected"));
+    }
+    return mp_const_none;
+}
+
+#endif
+
 mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
+    #if MICROPY_PY_SYS_SETTRACE == 1
     assert(!mp_prof_is_executing);
 
     mp_obj_frame_t *frame = MP_OBJ_TO_PTR(mp_obj_new_frame(code_state));
@@ -200,11 +258,9 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
         // We are entering not-yet-traced frame
         // which means it's a CALL event (not a GENERATOR)
         // so set the function definition line.
-        const mp_raw_code_t *rc = code_state->fun_bc->rc;
-        frame->lineno = rc->line_of_definition;
-        if (!rc->line_of_definition) {
-            frame->lineno = mp_prof_bytecode_lineno(rc, 0);
-        }
+        mp_obj_fun_bc_t *fun_bc = code_state->fun_obj;
+        const mp_raw_code_t *rc = fun_bc->rc;
+        frame->lineno = mp_prof_bytecode_lineno(rc, 0) - rc->specific.bytecode.line_of_definition_delta;
     }
     code_state->frame = frame;
 
@@ -222,6 +278,15 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
     top = mp_prof_callback_invoke(prof_trace_cb, args);
 
     code_state->frame->callback = mp_obj_is_callable(top) ? top : MP_OBJ_NULL;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    mp_frame_t *frame = code_state->frame;
+    if (frame == NULL) {
+        frame = mp_new_frame(code_state);
+        code_state->frame = frame;
+    }
+    mp_prof_trace_cb(frame, MP_QSTR_call, mp_const_none);
+    mp_obj_t top = mp_const_none;
+    #endif
 
     // Invalidate the last executed line number so the LINE trace can trigger after this CALL.
     frame->lineno = 0;
@@ -230,6 +295,7 @@ mp_obj_t mp_prof_frame_enter(mp_code_state_t *code_state) {
 }
 
 mp_obj_t mp_prof_frame_update(const mp_code_state_t *code_state) {
+    #if MICROPY_PY_SYS_SETTRACE == 1
     mp_obj_frame_t *frame = code_state->frame;
     if (frame == NULL) {
         // Frame was not allocated (eg because there was no memory available)
@@ -239,25 +305,37 @@ mp_obj_t mp_prof_frame_update(const mp_code_state_t *code_state) {
     mp_obj_frame_t *o = frame;
     mp_obj_code_t *code = o->code;
     const mp_raw_code_t *rc = code->rc;
-    const mp_bytecode_prelude_t *prelude = &rc->prelude;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    mp_frame_t *o = code_state->frame;
+    if (o == NULL) {
+        // Frame was not allocated (eg because there was no memory available)
+        return MP_OBJ_NULL;
+    }
+    const mp_obj_fun_bc_t *fun_bc = o->code_state->fun_obj;
+    const mp_raw_code_t *rc = fun_bc->rc;
+    #endif
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
 
     assert(o->code_state == code_state);
 
-    o->lasti = code_state->ip - prelude->opcodes;
+    o->lasti = code_state->ip - settrace_data->opcodes;
     o->lineno = mp_prof_bytecode_lineno(rc, o->lasti);
 
     return MP_OBJ_FROM_PTR(o);
 }
 
-mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, bool is_exception) {
+mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, mp_obj_t exception_or_none) {
     // Detect execution recursion
+    #if MICROPY_PY_SYS_SETTRACE == 1
     assert(!mp_prof_is_executing);
     assert(code_state->frame);
     assert(mp_obj_get_type(code_state->frame) == &mp_type_frame);
+    #endif
 
     // Detect data recursion
     assert(code_state != code_state->prev_state);
 
+    #if MICROPY_PY_SYS_SETTRACE == 1
     mp_obj_t top = mp_const_none;
     mp_obj_t callback = code_state->frame->callback;
 
@@ -269,17 +347,19 @@ mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, bool is_exception) {
     // Call event's are handled inside mp_prof_frame_enter
 
     // SETTRACE event EXCEPTION
-    if (is_exception) {
+    if (exception_or_none != mp_const_none) {
+        args->arg = exception_or_none;
         args->event = MP_OBJ_NEW_QSTR(MP_QSTR_exception);
         top = mp_prof_callback_invoke(callback, args);
         return top;
     }
 
     // SETTRACE event LINE
-    const mp_raw_code_t *rc = code_state->fun_bc->rc;
-    const mp_bytecode_prelude_t *prelude = &rc->prelude;
+    mp_obj_fun_bc_t *fun_bc = code_state->fun_obj;
+    const mp_raw_code_t *rc = fun_bc->rc;
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
     size_t prev_line_no = args->frame->lineno;
-    size_t current_line_no = mp_prof_bytecode_lineno(rc, code_state->ip - prelude->opcodes);
+    size_t current_line_no = mp_prof_bytecode_lineno(rc, code_state->ip - settrace_data->opcodes);
     if (prev_line_no != current_line_no) {
         args->frame->lineno = current_line_no;
         args->event = MP_OBJ_NEW_QSTR(MP_QSTR_line);
@@ -303,6 +383,34 @@ mp_obj_t mp_prof_instr_tick(mp_code_state_t *code_state, bool is_exception) {
     }
 
     return top;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    // Call event's are handled inside mp_prof_frame_enter
+
+    // SETTRACE event EXCEPTION
+    if (exception_or_none != mp_const_none) {
+        mp_prof_trace_cb(code_state->frame, MP_QSTR_exception, exception_or_none);
+        return mp_const_none;
+    }
+
+    // SETTRACE event LINE
+    const mp_obj_fun_bc_t *fun_bc = code_state->fun_obj;
+    const mp_raw_code_t *rc = fun_bc->rc;
+    const mp_prof_settrace_data_t *settrace_data = &rc->specific.bytecode;
+    size_t prev_line_no = code_state->frame->lineno;
+    size_t current_line_no = mp_prof_bytecode_lineno(rc, code_state->ip - settrace_data->opcodes);
+    if (prev_line_no != current_line_no) {
+        code_state->frame->lineno = current_line_no;
+        mp_prof_trace_cb(code_state->frame, MP_QSTR_line, mp_const_none);
+    }
+
+    // SETTRACE event RETURN
+    const byte *ip = code_state->ip;
+    if (*ip == MP_BC_RETURN_VALUE || *ip == MP_BC_YIELD_VALUE) {
+        mp_prof_trace_cb(code_state->frame, MP_QSTR_return, mp_const_none);
+    }
+
+    return mp_const_none;
+    #endif
 }
 
 /******************************************************************************/
@@ -804,8 +912,9 @@ static const byte *mp_prof_opcode_decode(const byte *ip, const mp_uint_t *const_
 
 void mp_prof_print_instr(const byte *ip, mp_code_state_t *code_state) {
     mp_dis_instruction_t _instruction, *instruction = &_instruction;
-    mp_prof_opcode_decode(ip, code_state->fun_bc->rc->const_table, instruction);
-    const mp_raw_code_t *rc = code_state->fun_bc->rc;
+    mp_obj_fun_bc_t *fun_bc = code_state->fun_obj;
+    mp_prof_opcode_decode(ip, fun_bc->rc->const_table, instruction);
+    const mp_raw_code_t *rc = fun_bc->rc;
     const mp_bytecode_prelude_t *prelude = &rc->prelude;
 
     mp_uint_t offset = ip - prelude->opcodes;
