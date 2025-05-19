@@ -29,6 +29,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+//--- Required only for Yoctopuce-specific handling of unpatched PATCH_WITH_BUILD tags
+#include <time.h>
+//---
 
 #include "py/scope.h"
 #include "py/emit.h"
@@ -38,6 +41,7 @@
 #include "py/nativeglue.h"
 #include "py/persistentcode.h"
 #include "py/smallint.h"
+#include "py/objstr.h"
 
 #if MICROPY_ENABLE_COMPILER
 
@@ -1084,6 +1088,11 @@ static void compile_raise_stmt(compiler_t *comp, mp_parse_node_struct_t *pns) {
     }
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 // q_base holds the base of the name
 // eg   a -> q_base=a
 //      a.b.c -> q_base=a
@@ -1147,6 +1156,10 @@ static void do_import_name(compiler_t *comp, mp_parse_node_t pn, qstr *q_base) {
         }
     }
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 static void compile_dotted_as_name(compiler_t *comp, mp_parse_node_t pn) {
     EMIT_ARG(load_const_small_int, 0); // level 0 import
@@ -3470,6 +3483,90 @@ static void scope_compute_things(scope_t *scope) {
     }
 }
 
+#if MICROPY_COMP_ADD_METADATA
+
+void mp_get_metadata(mp_parse_tree_t* parse_tree, vstr_t *meta_vstr)
+{
+    mp_parse_node_t pn = parse_tree->root;
+    mp_obj_t docstring = mp_const_none;
+    mp_print_t print;
+    vstr_init_print(meta_vstr, 64, &print);
+
+    // check the first statement for a doc string
+    if (MP_PARSE_NODE_IS_STRUCT_KIND(pn, PN_file_input_2)) {
+        mp_parse_node_struct_t* pns = (mp_parse_node_struct_t*)pn;
+        pn = pns->nodes[0];
+        if (MP_PARSE_NODE_IS_TOKEN(pn) && MP_PARSE_NODE_LEAF_ARG(pn) == MP_TOKEN_NEWLINE && MP_PARSE_NODE_STRUCT_NUM_NODES(pns) > 1) {
+            pn = pns->nodes[1];
+        }
+        if (MP_PARSE_NODE_IS_STRUCT_KIND(pn, PN_expr_stmt)) {
+            pn = ((mp_parse_node_struct_t*)pn)->nodes[0];
+            if (MP_PARSE_NODE_IS_LEAF(pn) && MP_PARSE_NODE_LEAF_KIND(pn) == MP_PARSE_NODE_STRING) {
+                docstring = MP_OBJ_NEW_QSTR(MP_PARSE_NODE_LEAF_ARG(pn));
+            } else if (MP_PARSE_NODE_IS_STRUCT_KIND(pn, PN_const_object)) {
+                mp_obj_t obj = get_const_object((mp_parse_node_struct_t*)pn);
+                if (mp_obj_is_str(obj)) {
+                    docstring = obj;
+                }
+            }
+        }
+    }
+    if (docstring != mp_const_none) {
+        // Parse and strip the doc string to extract only:
+        // - the description (first non-empty line)
+        // - any itemized property identified as such by a colon sign
+        // As this is used no more than once per .py file, do it simply using str.split()
+        extern mp_obj_fun_builtin_var_t str_strip_obj;
+        mp_obj_t args[3] = { docstring, MP_OBJ_NEW_QSTR(MP_QSTR__0x0a_), MP_OBJ_NEW_SMALL_INT(1) };
+        mp_obj_list_t* lines = MP_OBJ_TO_PTR(mp_obj_str_split(2, args));
+        mp_obj_t stripped;
+        size_t i = 0;
+        while (i < lines->len) {
+            stripped = str_strip_obj.fun.var(1, &lines->items[i++]);
+            GET_STR_LEN(stripped, stripped_len);
+            if (stripped_len > 0) {
+                mp_print_str(&print, "{\"description\":");
+                mp_obj_print_helper(&print, stripped, PRINT_JSON);
+                break;
+            }
+        }
+        if (meta_vstr->len == 0) {
+            // empty docstring
+            return;
+        }
+        args[1] = mp_obj_new_str_from_cstr(":");
+        while (i < lines->len) {
+            args[0] = lines->items[i];
+            mp_obj_list_t* def = MP_OBJ_TO_PTR(mp_obj_str_split(3, args));
+            if (def->len == 2) {
+                mp_print_str(&print, ",");
+                stripped = str_strip_obj.fun.var(1, &def->items[0]);
+                mp_obj_print_helper(&print, stripped, PRINT_JSON);
+                mp_print_str(&print, ":");
+                stripped = str_strip_obj.fun.var(1, &def->items[1]);
+                //--- Yoctopuce-specific handling of unpatched PATCH_WITH_VERSION tags
+                size_t val_len;
+                const char* val = mp_obj_str_get_data(stripped, &val_len);
+                if (!strcmp(val, "PATCH_WITH_VERSION")) {
+                    time_t t;
+                    struct tm* tm_info;
+                    char buffer[30];
+                    time(&t);
+                    tm_info = localtime(&t);
+                    strftime(buffer, sizeof(buffer), "dev (%Y-%m-%d %H:%M:%S)", tm_info);
+                    stripped = mp_obj_new_str_from_cstr(buffer);
+                }                
+                //---
+                mp_obj_print_helper(&print, stripped, PRINT_JSON);
+            }
+            i++;
+        }
+        mp_print_str(&print, "}");
+    }
+}
+
+#endif
+
 #if !MICROPY_EXPOSE_MP_COMPILE_TO_RAW_CODE
 static
 #endif
@@ -3637,6 +3734,9 @@ emit_finished:
     if (comp->emit_inline_asm != NULL) {
         cm->has_native = true;
     }
+    #endif
+    #if MICROPY_COMP_ADD_METADATA
+    mp_get_metadata(parse_tree, &cm->meta_vstr);
     #endif
     cm->n_qstr = comp->emit_common.qstr_map.used;
     cm->n_obj = comp->emit_common.const_obj_list.len;

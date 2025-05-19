@@ -472,7 +472,7 @@ void mp_raw_code_load(mp_reader_t *reader, mp_compiled_module_t *cm) {
     if (header[0] != 'M'
         || header[1] != MPY_VERSION
         || (arch != MP_NATIVE_ARCH_NONE && MPY_FEATURE_DECODE_SUB_VERSION(header[2]) != MPY_SUB_VERSION)
-        || header[3] > MP_SMALL_INT_BITS) {
+        || (header[3] & 0x7f) > MP_SMALL_INT_BITS) {
         mp_raise_ValueError(MP_ERROR_TEXT("incompatible .mpy file"));
     }
     if (arch != MP_NATIVE_ARCH_NONE) {
@@ -502,6 +502,17 @@ void mp_raw_code_load(mp_reader_t *reader, mp_compiled_module_t *cm) {
             (void)arch_flags;
             mp_raise_ValueError(MP_ERROR_TEXT("incompatible .mpy file"));
         }
+    }
+
+    // skip informative header if present
+    if (header[3] & 0x80) {
+        size_t info_size = read_uint(reader);
+        while (info_size > 0) {
+            read_byte(reader);
+            info_size--;
+        }
+        byte last_byte = read_byte(reader);
+        assert(!last_byte);
     }
 
     size_t n_qstr = read_uint(reader);
@@ -662,7 +673,7 @@ static void save_raw_code(mp_print_t *print, const mp_raw_code_t *rc) {
     #if MICROPY_EMIT_MACHINE_CODE
     if (rc->kind == MP_CODE_NATIVE_PY) {
         // Save prelude size
-        mp_print_uint(print, rc->prelude_offset);
+        mp_print_uint(print, rc->specific.native_py.prelude_offset);
     } else if (rc->kind == MP_CODE_NATIVE_VIPER || rc->kind == MP_CODE_NATIVE_ASM) {
         // Save basic scope info for viper and asm
         // Viper/asm functions don't support generator, variable args, or default keyword args
@@ -670,8 +681,8 @@ static void save_raw_code(mp_print_t *print, const mp_raw_code_t *rc) {
         mp_print_uint(print, 0);
         #if MICROPY_EMIT_INLINE_ASM
         if (rc->kind == MP_CODE_NATIVE_ASM) {
-            mp_print_uint(print, rc->asm_n_pos_args);
-            mp_print_uint(print, rc->asm_type_sig);
+            mp_print_uint(print, rc->specific.native_asm.n_pos_args);
+            mp_print_uint(print, rc->specific.native_asm.type_sig);
         }
         #endif
     }
@@ -690,7 +701,7 @@ void mp_raw_code_save(mp_compiled_module_t *cm, mp_print_t *print) {
     //  byte  'M'
     //  byte  version
     //  byte  native arch (and sub-version if native)
-    //  byte  number of bits in a small int
+    //  byte  number of bits in a small int (+0x80 if meta-data is present)
     byte header[4] = {
         'M',
         MPY_VERSION,
@@ -701,11 +712,26 @@ void mp_raw_code_save(mp_compiled_module_t *cm, mp_print_t *print) {
         MP_SMALL_INT_BITS,
         #endif
     };
+
+    #if MICROPY_COMP_ADD_METADATA
+    if (cm->meta_vstr.len > 0) {
+        header[3] |= 0x80;
+    }
+    #endif
     mp_print_bytes(print, header, sizeof(header));
 
     if (cm->arch_flags) {
         mp_print_uint(print, cm->arch_flags);
     }
+
+    #if MICROPY_COMP_ADD_METADATA
+    if (cm->meta_vstr.len > 0) {
+        // Add meta-data
+        mp_print_uint(print, cm->meta_vstr.len);
+        mp_print_bytes(print, (const byte *)cm->meta_vstr.buf, cm->meta_vstr.len);
+        mp_print_uint(print, 0); // NUL-terminate string
+    }
+    #endif
 
     // Number of entries in constant table.
     mp_print_uint(print, cm->n_qstr);

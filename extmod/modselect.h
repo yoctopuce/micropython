@@ -3,7 +3,7 @@
  *
  * The MIT License (MIT)
  *
- * Copyright (c) 2013, 2014 Damien P. George
+ * Copyright (c) 2020 Damien P. George
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,21 +23,15 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#ifndef MICROPY_INCLUDED_PY_OBJGENERATOR_H
-#define MICROPY_INCLUDED_PY_OBJGENERATOR_H
 
-#include "py/obj.h"
-#include "py/runtime.h"
+#ifndef MICROPY_INCLUDED_MODSELECT_H
+#define MICROPY_INCLUDED_MODSELECT_H
 
-typedef struct _mp_obj_gen_instance_t {
-    mp_obj_base_t base;
-    // mp_const_none: Not-running, no exception.
-    // MP_OBJ_NULL: Running, no exception.
-    // other: Not running, pending exception.
-    mp_obj_t pend_exc;
-    mp_code_state_t code_state;
-} mp_obj_gen_instance_t;
+mp_obj_t mp_select_poll(void);
+mp_obj_t mp_poll_register(size_t n_args, const mp_obj_t *args);
+mp_obj_t mp_poll_unregister(mp_obj_t self_in, mp_obj_t obj_in);
+mp_obj_t mp_poll_modify(mp_obj_t self_in, mp_obj_t obj_in, mp_obj_t eventmask_in);
+mp_obj_t mp_poll_ipoll(size_t n_args, const mp_obj_t *args);
+mp_obj_t mp_poll_iternext(mp_obj_t self_in);
 
-mp_vm_return_kind_t mp_obj_gen_resume(mp_obj_t self_in, mp_obj_t send_val, mp_obj_t throw_val, mp_obj_t *ret_val);
-
-#endif // MICROPY_INCLUDED_PY_OBJGENERATOR_H
+#endif // MICROPY_INCLUDED_MODSELECT_H

@@ -43,7 +43,13 @@ void mp_cstack_init_with_sp_here(size_t stack_size) {
 mp_uint_t mp_cstack_usage(void) {
     // Assumes descending stack
     volatile int stack_dummy;
-    return MP_STATE_THREAD(stack_top) - (char *)&stack_dummy;
+    mp_uint_t res = MP_STATE_THREAD(stack_top) - (char*)&stack_dummy;
+#ifdef mp_stack_check_beacon
+    if (mp_stack_check_beacon < res) {
+        mp_stack_check_beacon = res;
+    }
+#endif
+    return res;
 }
 
 #if MICROPY_STACK_CHECK

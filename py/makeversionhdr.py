@@ -69,11 +69,14 @@ def get_hash_from_git(repo_path):
 #    "vX.Y.Z" -- building at the release commit
 #    "vX.Y.Z-preview" -- building at any other commit
 def get_version_info_from_mpconfig(repo_path):
-    print(
-        "makeversionhdr.py: Warning: No git repo or tag info available, falling back to mpconfig.h version info.",
-        file=sys.stderr,
-    )
-
+    # yoctopuce specific
+    # vvvvvvvvvvvvvvvvvv
+    # print(
+    #     "makeversionhdr.py: Warning: No git repo or tag info available, falling back to mpconfig.h version info.",
+    #     file=sys.stderr,
+    # )
+    # ^^^^^^^^^^^^^^^^^^
+    # yoctopuce specific
     with open(os.path.join(repo_path, "py", "mpconfig.h")) as f:
         for line in f:
             if line.startswith("#define MICROPY_VERSION_MAJOR "):

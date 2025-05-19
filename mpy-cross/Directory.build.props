@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <PyVariant>standard</PyVariant>
+  </PropertyGroup>
+</Project>

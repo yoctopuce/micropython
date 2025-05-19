@@ -1058,6 +1058,9 @@ static mp_obj_t type_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp
 
     // make new instance
     mp_obj_t o = MP_OBJ_TYPE_GET_SLOT(self, make_new)(self, n_args, n_kw, args);
+#ifdef MICROPY_OBJ_NEW_HOOK
+    MICROPY_OBJ_NEW_HOOK(o);
+#endif
 
     // return new instance
     return o;

@@ -449,14 +449,14 @@ static inline uint32_t mp_clz_mpi(mp_int_t x) {
         zeroes++;
         mask >>= 1;
     }
-    return zeroes;
+    return (uint32_t)zeroes;
     #else
     #if MP_INT_MAX == INT_MAX
-    return mp_clz((unsigned)x);
+    return (uint32_t)mp_clz((unsigned)x);
     #elif MP_INT_MAX == LONG_MAX
-    return mp_clzl((unsigned long)x);
+    return (uint32_t)mp_clzl((unsigned long)x);
     #elif MP_INT_MAX == LLONG_MAX
-    return mp_clzll((unsigned long long)x);
+    return (uint32_t)mp_clzll((unsigned long long)x);
     #else
     #error Unexpected MP_INT_MAX value
     #endif

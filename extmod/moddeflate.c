@@ -404,6 +404,10 @@ const mp_obj_module_t mp_module_deflate = {
 MP_REGISTER_MODULE(MP_QSTR_deflate, mp_module_deflate);
 #endif // !MICROPY_ENABLE_DYNRUNTIME
 
+// Yoctopuce specific vvvvvv
+//
+// Include C files explicitely in projects and makefile
+#if !defined(VIRTUAL_HUB) && !defined(TEXAS_API)
 // Source files #include'd here to make sure they're compiled in
 // only if the module is enabled.
 
@@ -415,5 +419,8 @@ MP_REGISTER_MODULE(MP_QSTR_deflate, mp_module_deflate);
 #if MICROPY_PY_DEFLATE_COMPRESS
 #include "lib/uzlib/lz77.c"
 #endif
+
+#endif
+// Yoctopuce specific ^^^^^^
 
 #endif // MICROPY_PY_DEFLATE

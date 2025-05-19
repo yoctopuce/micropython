@@ -35,6 +35,7 @@
 #include "py/runtime.h"
 #include "py/gc.h"
 #include "py/parsenum.h"
+#include "py/stackctrl.h"
 #include "genhdr/mpversion.h"
 #ifdef _WIN32
 #include "ports/windows/fmode.h"
@@ -139,6 +140,10 @@ static int usage(char **argv) {
         "-s : source filename to embed in the compiled bytecode (defaults to input file)\n"
         "-v : verbose (trace various operations); can be multiple\n"
         "-O[N] : apply bytecode optimizations of level N\n"
+        #if MICROPY_COMP_PREDEFINED_CONST
+        "-D<SYMBOL>=<value> : add a predefined constant to micropython parser\n"
+        "-I file.py : parse file to preload all constants\n"
+        #endif
         "\n"
         "Target specific options:\n"
         "-msmall-int-bits=number : set the maximum bits used to encode a small-int\n"
@@ -287,7 +292,30 @@ static bool parse_rv32_flags_string(const char *source, mp_uint_t *flags) {
 }
 #endif
 
+#if MICROPY_COMP_PREDEFINED_CONST
+static mp_obj_t include_predef_const(const char *src, bool is_file) {
+    mp_lexer_t *lex;
+    nlr_buf_t nlr;
+    if (nlr_push(&nlr) == 0) {
+        if (is_file) {
+            lex = mp_lexer_new_from_file(qstr_from_str(src));
+        } else {
+            lex = mp_lexer_new_from_str_len(MP_QSTR__lt_string_gt_, src, strlen(src), 0);
+        }
+        mp_obj_t new_dict = mp_const_none;
+        (void)mp_parse_ex(lex, MP_PARSE_FILE_INPUT, &new_dict);
+        MP_STATE_VM(predefined_const) = new_dict;
+        nlr_pop();
+    } else {
+        return nlr.ret_val;
+    }
+    return mp_const_none;
+}
+#endif
+
 MP_NOINLINE int main_(int argc, char **argv) {
+    mp_stack_set_limit(40000 * (sizeof(void *) / 4));
+
     pre_process_options(argc, argv);
 
     char *heap = malloc(heap_size);
@@ -337,6 +365,36 @@ MP_NOINLINE int main_(int argc, char **argv) {
                     for (char *p = argv[a] + 1; *p && *p == 'O'; p++, MP_STATE_VM(mp_optimise_value)++) {;
                     }
                 }
+            #if MICROPY_COMP_PREDEFINED_CONST
+            } else if (argv[a][1] == 'D' || argv[a][1] == 'I') {
+                bool is_file = (argv[a][1] == 'I');
+                const char *argptr = argv[a] + 2;
+                vstr_t vstr;
+                if (*argptr == 0 && a + 1 < argc) {
+                    a += 1;
+                    argptr = argv[a];
+                }
+                size_t len = strlen(argptr);
+                vstr_init(&vstr, len + 8);
+                if (!is_file) {
+                    const char *eq = strchr(argptr, '=');
+                    if (!eq) {
+                        exit(usage(argv));
+                    }
+                    vstr_add_strn(&vstr, argptr, eq + 1 - argptr);
+                    vstr_add_str(&vstr, "const(");
+                    vstr_add_str(&vstr, eq + 1);
+                    vstr_add_char(&vstr, ')');
+                    argptr = vstr_null_terminated_str(&vstr);
+                }
+                mp_obj_t irritant = include_predef_const(argptr, is_file);
+                if (irritant != mp_const_none) {
+                    mp_printf(&mp_stderr_print, "error in %s:\n", argptr);
+                    mp_obj_print_exception(MICROPY_DEBUG_PRINTER, irritant);
+                    exit(1);
+                }
+                vstr_clear(&vstr);
+            #endif
             } else if (strcmp(argv[a], "-o") == 0) {
                 if (a + 1 >= argc) {
                     exit(usage(argv));
@@ -482,7 +540,7 @@ MP_NOINLINE int main_(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-    mp_cstack_init_with_sp_here(40000 * (sizeof(void *) / 4));
+    mp_stack_ctrl_init();
     return main_(argc, argv);
 }
 

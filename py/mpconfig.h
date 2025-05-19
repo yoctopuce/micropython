@@ -94,8 +94,14 @@
 // Enable everything (e.g. coverage)
 #define MICROPY_CONFIG_ROM_LEVEL_EVERYTHING (50)
 
-#ifdef MP_CONFIGFILE
+#if defined(MP_CONFIGFILE)
 #include MP_CONFIGFILE
+#elif defined(VIRTUAL_HUB) || defined(TEXAS_API)
+// Yoctopuce specific vvvvvv
+//
+// Use a specific filename for our setting file, to avoid confusion with the multiple mpconfig files in mpy tree
+#include <mpylink/ympconfig.h>
+// Yoctopuce specific ^^^^^^
 #else
 #include <mpconfigport.h>
 #endif
@@ -545,6 +551,13 @@ typedef uint64_t mp_uint_t;
 // generated or loaded from a file).  This does not cover inline asm code.
 #define MICROPY_ENABLE_NATIVE_CODE (MICROPY_EMIT_NATIVE || MICROPY_PERSISTENT_CODE_LOAD_NATIVE)
 
+// Whether the size of raw_code for each function can be limited to 64 KB max.
+// Enabling this option can save 4 bytes per function and method in frozen code,
+// and in RAM for each dynamically loaded function when SYS_SETTRACE is enabled.
+#ifndef MICROPY_LIMIT_RAWCODE_SIZE
+#define MICROPY_LIMIT_RAWCODE_SIZE (1)
+#endif
+
 /*****************************************************************************/
 /* Compiler configuration                                                    */
 
@@ -569,6 +582,11 @@ typedef uint64_t mp_uint_t;
 #define MICROPY_COMP_CONST_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable relational comparison folding; eg prune statements like if _DEBUG_LEVEL > 3
+#ifndef MICROPY_COMP_COMPAR_FOLDING
+#define MICROPY_COMP_COMPAR_FOLDING (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to compile constant tuples immediately to their respective objects; eg (1, True)
 // Otherwise the tuple will be built at runtime
 #ifndef MICROPY_COMP_CONST_TUPLE
@@ -578,6 +596,11 @@ typedef uint64_t mp_uint_t;
 // Whether to enable optimisations for constant literals, eg OrderedDict
 #ifndef MICROPY_COMP_CONST_LITERAL
 #define MICROPY_COMP_CONST_LITERAL (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
+#endif
+
+// Whether to handle sys.implementation.name as a compile time constant
+#ifndef MICROPY_COMP_SYSNAME_CONST
+#define MICROPY_COMP_SYSNAME_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 // Whether to enable lookup of constants in modules; eg module.CONST
@@ -597,6 +620,16 @@ typedef uint64_t mp_uint_t;
 #define MICROPY_COMP_CONST_FLOAT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
 #endif
 
+// Whether to enable class constants; class MyClass: FLAG = const(1)
+#ifndef MICROPY_COMP_CONST_MEMBERS
+#define MICROPY_COMP_CONST_MEMBERS (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to enable preloading compile-time constants from an include file
+#ifndef MICROPY_COMP_PREDEFINED_CONST
+#define MICROPY_COMP_PREDEFINED_CONST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
 // Whether to enable optimisation of: a, b = c, d
 // Costs 124 bytes (Thumb2)
 #ifndef MICROPY_COMP_DOUBLE_TUPLE_ASSIGN
@@ -613,6 +646,21 @@ typedef uint64_t mp_uint_t;
 // Costs about 80 bytes (Thumb2) and saves 2 bytes of bytecode for each use
 #ifndef MICROPY_COMP_RETURN_IF_EXPR
 #define MICROPY_COMP_RETURN_IF_EXPR (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
+// Whether to parse module docstring to add metadata to .mpy files
+#ifndef MICROPY_COMP_ADD_METADATA
+#define MICROPY_COMP_ADD_METADATA (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to prune __future__ imports at compile time
+#ifndef MICROPY_COMP_DROP_FUTURE_IMPORT
+#define MICROPY_COMP_DROP_FUTURE_IMPORT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
+#endif
+
+// Whether to drop typing.cast() expressions at compile time
+#ifndef MICROPY_COMP_DROP_TYPING_CAST
+#define MICROPY_COMP_DROP_TYPING_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_FULL_FEATURES)
 #endif
 
 /*****************************************************************************/
@@ -776,6 +824,13 @@ typedef uint64_t mp_uint_t;
 // *i* is the loop index variable (e.g. can be used to run every x loops)
 #ifndef MICROPY_GC_HOOK_LOOP
 #define MICROPY_GC_HOOK_LOOP(i)
+#endif
+
+// Hook invoked on all newly created objects
+#ifdef MICROPY_OBJ_NEW_HOOK
+void MICROPY_OBJ_NEW_HOOK(void *obj);
+#else
+#define MICROPY_OBJ_NEW_HOOK(obj)
 #endif
 
 // Whether to provide m_tracked_calloc, m_tracked_free functions
@@ -1161,6 +1216,13 @@ typedef time_t mp_timestamp_t;
 #define MICROPY_MODULE_FROZEN_MPY (0)
 #endif
 
+// Whether frozen modules as .mpy files should also freeze bytecode function objects to save RAM.
+// It saves 16 bytes of RAM per function, but costs 12 bytes of ROM per function when SYS_SETTRACE
+// is enabled, or 16/24 bytes of ROM per function or without SYS_SETTRACE, depending on the case.
+#ifndef MICROPY_MODULE_FROZEN_MPY_FREEZE_FUN_BC
+#define MICROPY_MODULE_FROZEN_MPY_FREEZE_FUN_BC (MICROPY_MODULE_FROZEN_MPY && MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
 // Convenience macro for whether frozen modules are supported
 #ifndef MICROPY_MODULE_FROZEN
 #define MICROPY_MODULE_FROZEN (MICROPY_MODULE_FROZEN_STR || MICROPY_MODULE_FROZEN_MPY)
@@ -1361,6 +1423,11 @@ typedef time_t mp_timestamp_t;
 #define MICROPY_PY_BUILTINS_STR_CENTER (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
 #endif
 
+// Whether str.ljust() and str.rjust() method provided
+#ifndef MICROPY_PY_BUILTINS_STR_JUST
+#define MICROPY_PY_BUILTINS_STR_JUST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EXTRA_FEATURES)
+#endif
+
 // Whether str.count() method provided
 #ifndef MICROPY_PY_BUILTINS_STR_COUNT
 #define MICROPY_PY_BUILTINS_STR_COUNT (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_CORE_FEATURES)
@@ -1408,6 +1475,21 @@ typedef time_t mp_timestamp_t;
 // Whether to support memoryview.itemsize attribute
 #ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE
 #define MICROPY_PY_BUILTINS_MEMORYVIEW_ITEMSIZE (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether to support memoryview.cast method
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_CAST (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether to support memoryview.tobytes method
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_TOBYTES
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_TOBYTES (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
+#endif
+
+// Whether to support memoryview.find method (non-standard extension)
+#ifndef MICROPY_PY_BUILTINS_MEMORYVIEW_FIND
+#define MICROPY_PY_BUILTINS_MEMORYVIEW_FIND (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)
 #endif
 
 // Whether to support set object
@@ -1775,6 +1857,11 @@ typedef time_t mp_timestamp_t;
 #define MICROPY_PY_SYS_EXIT (1)
 #endif
 
+// Whether to provide "sys.watchdog" function (Yoctopuce extension)
+#ifndef MICROPY_PY_SYS_WATCHDOG
+#define MICROPY_PY_SYS_WATCHDOG (0)
+#endif
+
 // Whether to provide "sys.atexit" function (MicroPython extension)
 #ifndef MICROPY_PY_SYS_ATEXIT
 #define MICROPY_PY_SYS_ATEXIT (0)
@@ -1805,6 +1892,19 @@ typedef time_t mp_timestamp_t;
 // Whether to provide "sys.settrace" function
 #ifndef MICROPY_PY_SYS_SETTRACE
 #define MICROPY_PY_SYS_SETTRACE (0)
+#endif
+
+// Whether to enable optimizations to reduce the memory overhead of SYS_SETTRACE
+#ifndef MICROPY_PY_SYS_SETTRACE_REDUCE_MEM_USAGE
+#define MICROPY_PY_SYS_SETTRACE_REDUCE_MEM_USAGE (1)
+#endif
+
+// Whether each function prelude information should be stored in decoded form
+// for debugging, when SYS_SETTRACE is enabled.
+// This option requires 16 extra bytes for each function, either from
+// flash memory for frozen code or from RAM for dynamically loaded code.
+#ifndef MICROPY_PY_SYS_SETTRACE_USE_FULL_PRELUDE
+#define MICROPY_PY_SYS_SETTRACE_USE_FULL_PRELUDE (!MICROPY_PY_SYS_SETTRACE_REDUCE_MEM_USAGE)
 #endif
 
 // Whether to provide "sys.getsizeof" function
@@ -1945,6 +2045,12 @@ typedef time_t mp_timestamp_t;
 // Whether to support the "separators" argument to dump, dumps
 #ifndef MICROPY_PY_JSON_SEPARATORS
 #define MICROPY_PY_JSON_SEPARATORS (1)
+#endif
+
+// Whether to preserve key order by default when parsing json
+// (CPython dict preserve order since 3.6)
+#ifndef MICROPY_PY_JSON_ORDEREDDICT
+#define MICROPY_PY_JSON_ORDEREDDICT (MICROPY_CPYTHON_COMPAT)
 #endif
 
 #ifndef MICROPY_PY_OS
@@ -2449,3 +2555,8 @@ typedef time_t mp_timestamp_t;
 #endif
 
 #endif // MICROPY_INCLUDED_PY_MPCONFIG_H
+
+#if defined(VIRTUAL_HUB) || defined(TEXAS_API)
+// include our wrappers to yoctopuce kernel
+#include "mpylink/ypython.h"
+#endif

@@ -37,6 +37,7 @@ MP_DECLARE_CONST_FUN_OBJ_0(mp_time_ticks_ms_obj);
 MP_DECLARE_CONST_FUN_OBJ_0(mp_time_ticks_us_obj);
 MP_DECLARE_CONST_FUN_OBJ_0(mp_time_ticks_cpu_obj);
 MP_DECLARE_CONST_FUN_OBJ_2(mp_time_ticks_diff_obj);
+MP_DECLARE_CONST_FUN_OBJ_2(mp_time_ticks_past_obj);
 MP_DECLARE_CONST_FUN_OBJ_2(mp_time_ticks_add_obj);
 MP_DECLARE_CONST_FUN_OBJ_0(mp_time_time_ns_obj);
 

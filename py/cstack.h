@@ -52,6 +52,10 @@ mp_uint_t mp_cstack_usage(void);
 
 void mp_cstack_check(void);
 
+#ifdef mp_stack_check_beacon
+extern mp_uint_t mp_stack_check_beacon;
+#endif
+
 #else
 
 static inline void mp_cstack_check(void) {

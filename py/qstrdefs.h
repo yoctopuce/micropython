@@ -64,6 +64,10 @@ Q(<string>)
 Q(<stdin>)
 Q(utf-8)
 
+#if MICROPY_PY_LATIN_1
+Q(latin-1)
+#endif
+
 #if MICROPY_MODULE_FROZEN
 Q(.frozen)
 #endif

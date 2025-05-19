@@ -130,7 +130,7 @@ void mp_str_print_quoted(const mp_print_t *print, const byte *str_data, size_t s
     mp_printf(print, "%c", quote_char);
 }
 
-#if MICROPY_PY_JSON
+#if MICROPY_PY_JSON || MICROPY_COMP_ADD_METADATA
 void mp_str_print_json(const mp_print_t *print, const byte *str_data, size_t str_len) {
     // for JSON spec, see http://www.ietf.org/rfc/rfc4627.txt
     // if we are given a valid utf8-encoded string, we will print it in a JSON-conforming way
@@ -158,7 +158,7 @@ void mp_str_print_json(const mp_print_t *print, const byte *str_data, size_t str
 
 static void str_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     GET_STR_DATA_LEN(self_in, str_data, str_len);
-    #if MICROPY_PY_JSON
+    #if MICROPY_PY_JSON || MICROPY_COMP_ADD_METADATA
     if (kind == PRINT_JSON) {
         mp_str_print_json(print, str_data, str_len);
         return;
@@ -940,22 +940,58 @@ static mp_obj_t str_rstrip(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(str_rstrip_obj, 1, 2, str_rstrip);
 
-#if MICROPY_PY_BUILTINS_STR_CENTER
-static mp_obj_t str_center(mp_obj_t str_in, mp_obj_t width_in) {
-    GET_STR_DATA_LEN(str_in, str, str_len);
-    mp_uint_t width = mp_obj_get_int(width_in);
-    if (str_len >= width) {
-        return str_in;
-    }
+#if MICROPY_PY_BUILTINS_STR_CENTER || MICROPY_PY_BUILTINS_STR_JUST
+enum { LJUST = 0, RJUST = 1, CENTER = 2 };
 
+static mp_obj_t str_just(int jtype, size_t n_args, const mp_obj_t *args) {
+    check_is_str_or_bytes(args[0]);
+    const mp_obj_type_t *self_type = mp_obj_get_type(args[0]);
+    char fillbyte = ' ';
+
+    if (n_args > 2) {
+        str_check_arg_type(self_type, args[2]);
+        GET_STR_DATA_LEN(args[2], s, l);
+        if (l != 1) {
+#if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
+            mp_raise_TypeError(MP_ERROR_TEXT("padding character expected"));
+#else
+            mp_raise_msg_varg(&mp_type_TypeError,
+                MP_ERROR_TEXT("padding character expected, but string of length %d found"), (int)l);
+#endif
+        }
+        fillbyte = s[0];
+    }
+    GET_STR_DATA_LEN(args[0], str, str_len);
+    mp_uint_t width = mp_obj_get_int(args[1]);
+    if (str_len >= width) {
+        return args[0];
+    }
     vstr_t vstr;
     vstr_init_len(&vstr, width);
-    memset(vstr.buf, ' ', width);
-    int left = (width - str_len) / 2;
+    memset(vstr.buf, fillbyte, width);
+    int left = (jtype ? (width - str_len) / jtype : 0);
     memcpy(vstr.buf + left, str, str_len);
-    return mp_obj_new_str_type_from_vstr(mp_obj_get_type(str_in), &vstr);
+    return mp_obj_new_str_type_from_vstr(self_type, &vstr);
 }
-MP_DEFINE_CONST_FUN_OBJ_2(str_center_obj, str_center);
+#endif
+
+#if MICROPY_PY_BUILTINS_STR_CENTER
+static mp_obj_t str_center(size_t n_args, const mp_obj_t *args) {
+    return str_just(CENTER, n_args, args);
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(str_center_obj, 2, 3, str_center);
+#endif
+
+#if MICROPY_PY_BUILTINS_STR_JUST
+static mp_obj_t str_ljust(size_t n_args, const mp_obj_t *args) {
+    return str_just(LJUST, n_args, args);
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(str_ljust_obj, 2, 3, str_ljust);
+
+static mp_obj_t str_rjust(size_t n_args, const mp_obj_t *args) {
+    return str_just(RJUST, n_args, args);
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(str_rjust_obj, 2, 3, str_rjust);
 #endif
 
 // Takes an int arg, but only parses unsigned numbers, and only changes
@@ -2056,7 +2092,7 @@ mp_obj_t mp_obj_bytes_fromhex(mp_obj_t type_in, mp_obj_t data) {
 static mp_obj_t bytes_hex_as_str(size_t n_args, const mp_obj_t *args) {
     return mp_obj_bytes_hex(n_args, args, &mp_type_str);
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bytes_hex_as_str_obj, 1, 2, bytes_hex_as_str);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bytes_hex_as_str_obj, 1, 2, bytes_hex_as_str);
 
 static MP_DEFINE_CONST_FUN_OBJ_2(bytes_fromhex_obj, mp_obj_bytes_fromhex);
 static MP_DEFINE_CONST_CLASSMETHOD_OBJ(bytes_fromhex_classmethod_obj, MP_ROM_PTR(&bytes_fromhex_obj));
@@ -2122,6 +2158,10 @@ static const mp_rom_map_elem_t array_bytearray_str_bytes_locals_table[] = {
     #if MICROPY_PY_BUILTINS_STR_CENTER
     { MP_ROM_QSTR(MP_QSTR_center), MP_ROM_PTR(&str_center_obj) },
     #endif
+    #if MICROPY_PY_BUILTINS_STR_JUST
+    { MP_ROM_QSTR(MP_QSTR_ljust), MP_ROM_PTR(&str_ljust_obj) },
+    { MP_ROM_QSTR(MP_QSTR_rjust), MP_ROM_PTR(&str_rjust_obj) },
+    #endif
     { MP_ROM_QSTR(MP_QSTR_lower), MP_ROM_PTR(&str_lower_obj) },
     { MP_ROM_QSTR(MP_QSTR_upper), MP_ROM_PTR(&str_upper_obj) },
     { MP_ROM_QSTR(MP_QSTR_isspace), MP_ROM_PTR(&str_isspace_obj) },
@@ -2176,7 +2216,7 @@ MP_DEFINE_CONST_DICT_WITH_SIZE(mp_obj_array_locals_dict,
     TABLE_ENTRIES_ARRAY);
 #endif
 
-#if MICROPY_PY_BUILTINS_MEMORYVIEW && MICROPY_PY_BUILTINS_BYTES_HEX
+#if MICROPY_PY_BUILTINS_MEMORYVIEW && MICROPY_PY_BUILTINS_BYTES_HEX && !MICROPY_PY_BUILTINS_MEMORYVIEW_CAST && !MICROPY_PY_BUILTINS_MEMORYVIEW_TOBYTES
 MP_DEFINE_CONST_DICT_WITH_SIZE(mp_obj_memoryview_locals_dict,
     array_bytearray_str_bytes_locals_table + TABLE_ENTRIES_ARRAY,
     1); // Just the "hex" entry.

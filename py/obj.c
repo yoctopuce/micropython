@@ -33,6 +33,7 @@
 #include "py/objtype.h"
 #include "py/objint.h"
 #include "py/objstr.h"
+#include "py/objtuple.h"
 #include "py/runtime.h"
 #include "py/cstack.h"
 #include "py/stream.h" // for mp_obj_print
@@ -41,6 +42,7 @@
 MP_NOINLINE void *mp_obj_malloc_helper(size_t num_bytes, const mp_obj_type_t *type) {
     mp_obj_base_t *base = (mp_obj_base_t *)m_malloc(num_bytes);
     base->type = type;
+    MICROPY_OBJ_NEW_HOOK(base);
     return base;
 }
 
@@ -49,6 +51,7 @@ MP_NOINLINE void *mp_obj_malloc_helper(size_t num_bytes, const mp_obj_type_t *ty
 MP_NOINLINE void *mp_obj_malloc_with_finaliser_helper(size_t num_bytes, const mp_obj_type_t *type) {
     mp_obj_base_t *base = (mp_obj_base_t *)m_malloc_with_finaliser(num_bytes);
     base->type = type;
+    MICROPY_OBJ_NEW_HOOK(base);
     return base;
 }
 #endif
@@ -450,7 +453,7 @@ void mp_obj_get_complex(mp_obj_t arg, mp_float_t *real, mp_float_t *imag) {
 
 // note: returned value in *items may point to the interior of a GC block
 void mp_obj_get_array(mp_obj_t o, size_t *len, mp_obj_t **items) {
-    if (mp_obj_is_type(o, &mp_type_tuple)) {
+    if (mp_obj_is_tuple_compatible(o)) {
         mp_obj_tuple_get(o, len, items);
     } else if (mp_obj_is_type(o, &mp_type_list)) {
         mp_obj_list_get(o, len, items);

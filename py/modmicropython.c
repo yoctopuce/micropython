@@ -49,6 +49,22 @@ static mp_obj_t mp_micropython_opt_level(size_t n_args, const mp_obj_t *args) {
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_micropython_opt_level_obj, 0, 1, mp_micropython_opt_level);
 #endif
 
+#if MICROPY_ENABLE_COMPILER && MICROPY_COMP_PREDEFINED_CONST
+static mp_obj_t mp_micropython_predef_const(size_t n_args, const mp_obj_t *args) {
+    if (n_args == 0) {
+        return MP_STATE_VM(predefined_const);
+    } else {
+        mp_obj_t prev = MP_STATE_VM(predefined_const);
+        if (args[0] != mp_const_none && !mp_obj_is_dict_or_ordereddict(args[0])) {
+            mp_raise_TypeError(NULL);
+        }
+        MP_STATE_VM(predefined_const) = args[0];
+        return prev;
+    }
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_micropython_predef_const_obj, 0, 1, mp_micropython_predef_const);
+#endif
+
 #if MICROPY_PY_MICROPYTHON_MEM_INFO
 
 #if MICROPY_MEM_STATS
@@ -171,6 +187,9 @@ static const mp_rom_map_elem_t mp_module_micropython_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_const), MP_ROM_PTR(&mp_identity_obj) },
     #if MICROPY_ENABLE_COMPILER
     { MP_ROM_QSTR(MP_QSTR_opt_level), MP_ROM_PTR(&mp_micropython_opt_level_obj) },
+    #endif
+    #if MICROPY_ENABLE_COMPILER && MICROPY_COMP_PREDEFINED_CONST
+    { MP_ROM_QSTR(MP_QSTR_predef_const), MP_ROM_PTR(&mp_micropython_predef_const_obj) },
     #endif
     #if MICROPY_PY_MICROPYTHON_MEM_INFO
     #if MICROPY_MEM_STATS

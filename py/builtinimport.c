@@ -36,6 +36,7 @@
 #include "py/runtime.h"
 #include "py/builtin.h"
 #include "py/frozenmod.h"
+#include "py/objfun.h"
 
 #if MICROPY_DEBUG_VERBOSE // print debugging info
 #define DEBUG_PRINT (1)
@@ -159,7 +160,7 @@ static void do_load_from_lexer(mp_module_context_t *context, mp_lexer_t *lex) {
     #endif
 
     // parse, compile and execute the module in its context
-    mp_obj_dict_t *mod_globals = context->module.globals;
+    mp_obj_dict_t *mod_globals = mp_module_context_get_globals(context);
     mp_parse_compile_execute(lex, MP_PARSE_FILE_INPUT, mod_globals, mod_globals);
 }
 #endif
@@ -173,7 +174,7 @@ static void do_execute_proto_fun(const mp_module_context_t *context, mp_proto_fu
     #endif
 
     // execute the module in its context
-    mp_obj_dict_t *mod_globals = context->module.globals;
+    mp_obj_dict_t *mod_globals = mp_module_context_get_globals(context);
 
     // save context
     nlr_jump_callback_node_globals_locals_t ctx;
@@ -196,7 +197,14 @@ static void do_execute_proto_fun(const mp_module_context_t *context, mp_proto_fu
 }
 #endif
 
-static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
+#if MICROPY_MODULE_FROZEN_MPY_FREEZE_FUN_BC
+#define DO_LOAD_RETURN_TYPE mp_obj_t
+#define DO_LOAD_RETURN return MP_OBJ_FROM_PTR(module_obj)
+#else
+#define DO_LOAD_RETURN_TYPE void
+#define DO_LOAD_RETURN return
+#endif
+static DO_LOAD_RETURN_TYPE do_load(mp_module_context_t *module_obj, vstr_t *file) {
     #if MICROPY_MODULE_FROZEN || MICROPY_ENABLE_COMPILER || (MICROPY_PERSISTENT_CODE_LOAD && MICROPY_HAS_FILE_READER)
     const char *file_str = vstr_null_terminated_str(file);
     #endif
@@ -215,7 +223,7 @@ static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
         #if MICROPY_MODULE_FROZEN_STR
         if (frozen_type == MP_FROZEN_STR) {
             do_load_from_lexer(module_obj, modref);
-            return;
+            DO_LOAD_RETURN;
         }
         #endif
 
@@ -224,14 +232,29 @@ static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
         #if MICROPY_MODULE_FROZEN_MPY
         if (frozen_type == MP_FROZEN_MPY) {
             const mp_frozen_module_t *frozen = modref;
+            const mp_raw_code_truncated_t *proto_fun = frozen->proto_fun;
+#if MICROPY_MODULE_FROZEN_MPY_FREEZE_FUN_BC
+            // Instead of the newly allocated context, use the frozen module because
+            // it is referenced by frozen mp_obj_fun_bc_t objects.
+            mp_obj_dict_t *globals = module_obj->module.globals;
+            mp_obj_t module_name = mp_obj_dict_get(MP_OBJ_FROM_PTR(globals), MP_OBJ_NEW_QSTR(MP_QSTR___name__));
+            mp_map_t *mp_loaded_modules_map = &MP_STATE_VM(mp_loaded_modules_dict).map;
+            mp_map_elem_t *el = mp_map_lookup(mp_loaded_modules_map, module_name, MP_MAP_LOOKUP);
+            assert(el != NULL);
+            *frozen->globals_ref = globals;
+            el->value = module_obj;
+            module_obj = (void *)frozen;
+#else
+            // setup constants from frozen module
             module_obj->constants = frozen->constants;
+#endif
             #if MICROPY_MODULE___FILE__
             qstr frozen_file_qstr = qstr_from_str(file_str + frozen_path_prefix_len);
             #else
             qstr frozen_file_qstr = MP_QSTRnull;
             #endif
-            do_execute_proto_fun(module_obj, frozen->proto_fun, frozen_file_qstr);
-            return;
+            do_execute_proto_fun(module_obj, proto_fun, frozen_file_qstr);
+            DO_LOAD_RETURN;
         }
         #endif
     }
@@ -248,7 +271,7 @@ static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
         cm.context = module_obj;
         mp_raw_code_load_file(file_qstr, &cm);
         do_execute_proto_fun(cm.context, cm.rc, file_qstr);
-        return;
+        DO_LOAD_RETURN;
     }
     #endif
 
@@ -257,13 +280,18 @@ static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
     {
         mp_lexer_t *lex = mp_lexer_new_from_file(file_qstr);
         do_load_from_lexer(module_obj, lex);
-        return;
+        DO_LOAD_RETURN;
     }
     #else
     // If we get here then the file was not frozen and we can't compile scripts.
     mp_raise_msg(&mp_type_ImportError, MP_ERROR_TEXT("script compilation not supported"));
     #endif
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
 
 // Convert a relative (to the current module) import, going up "level" levels,
 // into an absolute import.
@@ -344,6 +372,10 @@ static void evaluate_relative_import(mp_int_t level, const char **module_name, s
     *module_name = qstr_str(new_mod_q);
     *module_name_len = new_module_name_len;
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 typedef struct _nlr_jump_callback_node_unregister_module_t {
     nlr_jump_callback_node_t callback;
@@ -443,6 +475,20 @@ static mp_obj_t process_import_at_level(qstr full_mod_name, qstr level_mod_name,
             vstr_add_str(&path, qstr_str(level_mod_name));
 
             stat = stat_module(&path);
+            //-- Yoctopuce - always try to fallback to frozen modules, as we need to support
+            //               extensible frozen packages (eg. yoctolib)
+            if (stat == MP_IMPORT_STAT_NO_EXIST) {
+                const int frozen_path_prefix_len = strlen(MP_FROZEN_PATH_PREFIX);
+                if (strncmp(vstr_str(&path), MP_FROZEN_PATH_PREFIX, frozen_path_prefix_len) != 0) {
+                    vstr_reset(&path);
+                    vstr_add_str(&path, MP_FROZEN_PATH_PREFIX);
+                    vstr_add_str(&path, mp_obj_str_get_str(dest[0]));
+                    vstr_add_char(&path, PATH_SEP_CHAR[0]);
+                    vstr_add_str(&path, qstr_str(level_mod_name));
+                    stat = stat_module(&path);
+                }
+            }
+            //--
         }
     }
 
@@ -503,7 +549,11 @@ static mp_obj_t process_import_at_level(qstr full_mod_name, qstr level_mod_name,
 
         // execute "path/__init__.py" (if available).
         if (stat_file_py_or_mpy(&path) == MP_IMPORT_STAT_FILE) {
+            #if MICROPY_MODULE_FROZEN_MPY_FREEZE_FUN_BC
+            module_obj = do_load(MP_OBJ_TO_PTR(module_obj), &path);
+            #else
             do_load(MP_OBJ_TO_PTR(module_obj), &path);
+            #endif
         } else {
             // No-op. Nothing to load.
             // mp_warning("%s is imported as namespace package", vstr_str(&path));
@@ -512,7 +562,11 @@ static mp_obj_t process_import_at_level(qstr full_mod_name, qstr level_mod_name,
         path.len = orig_path_len;
     } else { // MP_IMPORT_STAT_FILE
         // File -- execute "path.(m)py".
+        #if MICROPY_MODULE_FROZEN_MPY_FREEZE_FUN_BC
+        module_obj = do_load(MP_OBJ_TO_PTR(module_obj), &path);
+        #else
         do_load(MP_OBJ_TO_PTR(module_obj), &path);
+        #endif
         // Note: This should be the last component in the import path. If
         // there are remaining components then in the next call to
         // process_import_at_level will detect that it doesn't have

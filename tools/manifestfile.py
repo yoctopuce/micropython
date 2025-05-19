@@ -573,8 +573,12 @@ class ManifestFile:
 
 
 # Generate a temporary file with a line appended to the end that adds __version__.
+# If no metadata is present, use the original path
 @contextlib.contextmanager
 def tagged_py_file(path, metadata):
+    if metadata.version is None:
+        yield path
+        return
     dest_fd, dest_path = tempfile.mkstemp(suffix=".py", text=True)
     try:
         with os.fdopen(dest_fd, "w") as dest:
