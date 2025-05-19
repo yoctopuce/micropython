@@ -217,6 +217,9 @@ typedef struct _mp_compiled_module_t {
     mp_module_context_t *context;
     const struct _mp_raw_code_t *rc;
     #if MICROPY_PERSISTENT_CODE_SAVE
+    #if MICROPY_COMP_ADD_METADATA
+    vstr_t meta_vstr;
+    #endif
     bool has_native;
     size_t n_qstr;
     size_t n_obj;
@@ -244,9 +247,12 @@ typedef struct _mp_code_state_t {
     #if MICROPY_STACKLESS
     struct _mp_code_state_t *prev;
     #endif
-    #if MICROPY_PY_SYS_SETTRACE
+    #if MICROPY_PY_SYS_SETTRACE == 1
     struct _mp_code_state_t *prev_state;
     struct _mp_obj_frame_t *frame;
+    #elif MICROPY_PY_SYS_SETTRACE == 2
+    struct _mp_code_state_t *prev_state;
+    struct _mp_frame_t *frame;
     #endif
     // Variable-length
     mp_obj_t state[0];
