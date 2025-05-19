@@ -200,6 +200,30 @@ static mp_obj_t mp_sys_exit(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_sys_exit_obj, 0, 1, mp_sys_exit);
 
+#if MICROPY_PY_SYS_WATCHDOG
+// watchdog(delay_s): Launch watchdog for specified duration (max 2*86400 = 2 days); set to zero to disable
+static mp_obj_t mp_sys_watchdog(mp_obj_t obj) {
+    extern u32 mpy_watchdog;
+    mp_int_t delay = mp_obj_int_get_truncated(obj);
+    mp_int_t res = 0;
+    u32 ticks = mp_hal_ticks_ms();
+    if (mpy_watchdog) {
+        res = ((s32)mpy_watchdog - (s32)ticks) / 1000 + 1;
+    }
+    if (delay <= 0) {
+        mpy_watchdog = 0;
+    } else {
+        if (delay > 2*86400) {
+            delay = 2*86400;
+        }
+        mpy_watchdog = ticks + delay * 1000u;
+    }
+
+    return mp_obj_new_int(res);
+}
+MP_DEFINE_CONST_FUN_OBJ_1(mp_sys_watchdog_obj, mp_sys_watchdog);
+#endif
+
 static mp_obj_t mp_sys_print_exception(size_t n_args, const mp_obj_t *args) {
     #if MICROPY_PY_IO && MICROPY_PY_SYS_STDFILES
     void *stream_obj = &mp_sys_stdout_obj;
@@ -373,6 +397,9 @@ static const mp_rom_map_elem_t mp_module_sys_globals_table[] = {
      */
 
     { MP_ROM_QSTR(MP_QSTR_print_exception), MP_ROM_PTR(&mp_sys_print_exception_obj) },
+    #if MICROPY_PY_SYS_WATCHDOG
+    { MP_ROM_QSTR(MP_QSTR_watchdog), MP_ROM_PTR(&mp_sys_watchdog_obj) },
+    #endif
     #if MICROPY_PY_SYS_ATEXIT
     { MP_ROM_QSTR(MP_QSTR_atexit), MP_ROM_PTR(&mp_sys_atexit_obj) },
     #endif
