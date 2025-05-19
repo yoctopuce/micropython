@@ -130,7 +130,7 @@ void mp_str_print_quoted(const mp_print_t *print, const byte *str_data, size_t s
     mp_printf(print, "%c", quote_char);
 }
 
-#if MICROPY_PY_JSON
+#if MICROPY_PY_JSON || MICROPY_COMP_ADD_METADATA
 void mp_str_print_json(const mp_print_t *print, const byte *str_data, size_t str_len) {
     // for JSON spec, see http://www.ietf.org/rfc/rfc4627.txt
     // if we are given a valid utf8-encoded string, we will print it in a JSON-conforming way
@@ -158,7 +158,7 @@ void mp_str_print_json(const mp_print_t *print, const byte *str_data, size_t str
 
 static void str_print(const mp_print_t *print, mp_obj_t self_in, mp_print_kind_t kind) {
     GET_STR_DATA_LEN(self_in, str_data, str_len);
-    #if MICROPY_PY_JSON
+    #if MICROPY_PY_JSON || MICROPY_COMP_ADD_METADATA
     if (kind == PRINT_JSON) {
         mp_str_print_json(print, str_data, str_len);
         return;
@@ -2053,7 +2053,7 @@ mp_obj_t mp_obj_bytes_fromhex(mp_obj_t type_in, mp_obj_t data) {
 static mp_obj_t bytes_hex_as_str(size_t n_args, const mp_obj_t *args) {
     return mp_obj_bytes_hex(n_args, args, &mp_type_str);
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bytes_hex_as_str_obj, 1, 2, bytes_hex_as_str);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(bytes_hex_as_str_obj, 1, 2, bytes_hex_as_str);
 
 static MP_DEFINE_CONST_FUN_OBJ_2(bytes_fromhex_obj, mp_obj_bytes_fromhex);
 static MP_DEFINE_CONST_CLASSMETHOD_OBJ(bytes_fromhex_classmethod_obj, MP_ROM_PTR(&bytes_fromhex_obj));
@@ -2173,7 +2173,7 @@ MP_DEFINE_CONST_DICT_WITH_SIZE(mp_obj_array_locals_dict,
     TABLE_ENTRIES_ARRAY);
 #endif
 
-#if MICROPY_PY_BUILTINS_MEMORYVIEW && MICROPY_PY_BUILTINS_BYTES_HEX
+#if MICROPY_PY_BUILTINS_MEMORYVIEW && MICROPY_PY_BUILTINS_BYTES_HEX && !MICROPY_PY_BUILTINS_MEMORYVIEW_CAST
 MP_DEFINE_CONST_DICT_WITH_SIZE(mp_obj_memoryview_locals_dict,
     array_bytearray_str_bytes_locals_table + TABLE_ENTRIES_ARRAY,
     1); // Just the "hex" entry.
