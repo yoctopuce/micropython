@@ -33,6 +33,7 @@
 #include "py/objtype.h"
 #include "py/objint.h"
 #include "py/objstr.h"
+#include "py/objtuple.h"
 #include "py/runtime.h"
 #include "py/cstack.h"
 #include "py/stream.h" // for mp_obj_print
@@ -420,7 +421,7 @@ void mp_obj_get_complex(mp_obj_t arg, mp_float_t *real, mp_float_t *imag) {
 
 // note: returned value in *items may point to the interior of a GC block
 void mp_obj_get_array(mp_obj_t o, size_t *len, mp_obj_t **items) {
-    if (mp_obj_is_type(o, &mp_type_tuple)) {
+    if (mp_obj_is_tuple_compatible(o)) {
         mp_obj_tuple_get(o, len, items);
     } else if (mp_obj_is_type(o, &mp_type_list)) {
         mp_obj_list_get(o, len, items);
