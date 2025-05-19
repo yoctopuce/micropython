@@ -154,6 +154,14 @@
     assert(code_state != code_state->prev_state); \
 } while(0)
 
+#define FRAME_LEAVE() do { \
+    assert(code_state != code_state->prev_state); \
+    MP_STATE_THREAD(current_code_state) = code_state->prev_state; \
+    assert(code_state != code_state->prev_state); \
+} while(0)
+
+#if MICROPY_PY_SYS_SETTRACE == 1
+
 #define FRAME_ENTER() do { \
     assert(code_state != code_state->prev_state); \
     code_state->prev_state = MP_STATE_THREAD(current_code_state); \
@@ -163,12 +171,6 @@
     } \
 } while(0)
 
-#define FRAME_LEAVE() do { \
-    assert(code_state != code_state->prev_state); \
-    MP_STATE_THREAD(current_code_state) = code_state->prev_state; \
-    assert(code_state != code_state->prev_state); \
-} while(0)
-
 #define FRAME_UPDATE() do { \
     assert(MP_STATE_THREAD(current_code_state) == code_state); \
     if (!mp_prof_is_executing) { \
@@ -176,23 +178,49 @@
     } \
 } while(0)
 
-#define TRACE_TICK(current_ip, current_sp, is_exception) do { \
+#define TRACE_TICK(current_ip, current_sp, exception_or_none) do { \
     assert(code_state != code_state->prev_state); \
     assert(MP_STATE_THREAD(current_code_state) == code_state); \
     if (!mp_prof_is_executing && code_state->frame && MP_STATE_THREAD(prof_trace_callback)) { \
         MP_PROF_INSTR_DEBUG_PRINT(code_state->ip); \
     } \
     if (!mp_prof_is_executing && code_state->frame && code_state->frame->callback) { \
-        mp_prof_instr_tick(code_state, is_exception); \
+        mp_prof_instr_tick(code_state, exception_or_none); \
     } \
 } while(0)
+
+#elif MICROPY_PY_SYS_SETTRACE == 2
+
+#define FRAME_ENTER() do { \
+    assert(code_state != code_state->prev_state); \
+    code_state->prev_state = MP_STATE_THREAD(current_code_state); \
+    assert(code_state != code_state->prev_state); \
+    if (MP_STATE_THREAD(prof_systrace_enabled)) { \
+        mp_prof_frame_enter(code_state); \
+    } \
+} while(0)
+
+#define FRAME_UPDATE() do { \
+    assert(MP_STATE_THREAD(current_code_state) == code_state); \
+    if (MP_STATE_THREAD(prof_systrace_enabled)) { \
+        code_state->frame = MP_OBJ_TO_PTR(mp_prof_frame_update(code_state)); \
+    } \
+} while(0)
+
+#define TRACE_TICK(current_ip, current_sp, exception_or_none) do { \
+    if (MP_STATE_THREAD(prof_systrace_enabled) && code_state->frame) { \
+        mp_prof_instr_tick(code_state, exception_or_none); \
+    } \
+} while(0)
+
+#endif // MICROPY_PY_SYS_SETTRACE == x
 
 #else // MICROPY_PY_SYS_SETTRACE
 #define FRAME_SETUP()
 #define FRAME_ENTER()
 #define FRAME_LEAVE()
 #define FRAME_UPDATE()
-#define TRACE_TICK(current_ip, current_sp, is_exception)
+#define TRACE_TICK(current_ip, current_sp, exception_or_none)
 #endif // MICROPY_PY_SYS_SETTRACE
 
 #if MICROPY_PY_BUILTINS_SLICE
@@ -247,7 +275,7 @@ mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_cod
     #define DISPATCH() do { \
         TRACE(ip); \
         MARK_EXC_IP_GLOBAL(); \
-        TRACE_TICK(ip, sp, false); \
+        TRACE_TICK(ip, sp, mp_const_none); \
         goto *entry_table[*ip++]; \
     } while (0)
     #define DISPATCH_WITH_PEND_EXC_CHECK() goto pending_exception_check
@@ -328,7 +356,7 @@ dispatch_loop:
                 #else
                 TRACE(ip);
                 MARK_EXC_IP_GLOBAL();
-                TRACE_TICK(ip, sp, false);
+                TRACE_TICK(ip, sp, mp_const_none);
                 switch (*ip++) {
                 #endif
 
@@ -1426,7 +1454,7 @@ exception_handler:
             #if MICROPY_PY_SYS_SETTRACE
             // Exceptions are traced here
             if (mp_obj_is_subclass_fast(MP_OBJ_FROM_PTR(((mp_obj_base_t*)nlr.ret_val)->type), MP_OBJ_FROM_PTR(&mp_type_Exception))) {
-                TRACE_TICK(code_state->ip, code_state->sp, true /* yes, it's an exception */);
+                TRACE_TICK(code_state->ip, code_state->sp, nlr.ret_val /* yes, it's an exception */);
             }
             #endif
 

@@ -265,6 +265,11 @@ static void do_load(mp_module_context_t *module_obj, vstr_t *file) {
     #endif
 }
 
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstack-usage="
+#endif
+
 // Convert a relative (to the current module) import, going up "level" levels,
 // into an absolute import.
 static void evaluate_relative_import(mp_int_t level, const char **module_name, size_t *module_name_len) {
@@ -344,6 +349,10 @@ static void evaluate_relative_import(mp_int_t level, const char **module_name, s
     *module_name = qstr_str(new_mod_q);
     *module_name_len = new_module_name_len;
 }
+
+#ifdef EMBEDDED_API
+#pragma GCC diagnostic pop
+#endif
 
 typedef struct _nlr_jump_callback_node_unregister_module_t {
     nlr_jump_callback_node_t callback;
@@ -441,6 +450,20 @@ static mp_obj_t process_import_at_level(qstr full_mod_name, qstr level_mod_name,
             vstr_add_str(&path, qstr_str(level_mod_name));
 
             stat = stat_module(&path);
+            //-- Yoctopuce - always try to fallback to frozen modules, as we need to support
+            //               extensible frozen packages (eg. yoctolib)
+            if (stat == MP_IMPORT_STAT_NO_EXIST) {
+                const int frozen_path_prefix_len = strlen(MP_FROZEN_PATH_PREFIX);
+                if (strncmp(vstr_str(&path), MP_FROZEN_PATH_PREFIX, frozen_path_prefix_len) != 0) {
+                    vstr_reset(&path);
+                    vstr_add_str(&path, MP_FROZEN_PATH_PREFIX);
+                    vstr_add_str(&path, mp_obj_str_get_str(dest[0]));
+                    vstr_add_char(&path, PATH_SEP_CHAR[0]);
+                    vstr_add_str(&path, qstr_str(level_mod_name));
+                    stat = stat_module(&path);
+                }
+            }
+            //--
         }
     }
 

@@ -96,9 +96,39 @@ static void gc_helper_get_regs(gc_helper_regs_t arr) {
     arr[3] = ebp;
 }
 
-#elif defined(__thumb2__) || defined(__thumb__) || defined(__arm__)
+#elif defined(__thumb2__)
 
-// Fallback implementation, prefer gchelper_thumb1.s or gchelper_thumb2.s
+#define USE_GC_NATIVE_HELPER
+
+#include <stdint.h>
+
+MP_NOINLINE uintptr_t gc_helper_get_regs_and_sp(uintptr_t *regs) {
+    __asm__ volatile (
+        // Store registers into the given array
+        "str r4, [%0], #4\n\t"
+        "str r5, [%0], #4\n\t"
+        "str r6, [%0], #4\n\t"
+        "str r7, [%0], #4\n\t"
+        "str r8, [%0], #4\n\t"
+        "str r9, [%0], #4\n\t"
+        "str r10, [%0], #4\n\t"
+        "str r11, [%0], #4\n\t"
+        "str r12, [%0], #4\n\t"
+        "str r13, [%0], #4\n\t"
+
+        // Return the stack pointer
+        "mov %0, sp\n\t"
+        : "=r" (regs)  // Output operand
+        : "0" (regs)   // Input operand
+        : "memory"     // Clobbered registers
+    );
+
+    return (uintptr_t) regs;
+}
+
+#elif defined(__thumb__) || defined(__arm__)
+
+// Fallback implementation, prefer gchelper_thumb1.s
 
 static void gc_helper_get_regs(gc_helper_regs_t arr) {
     #ifdef __clang__
@@ -213,10 +243,17 @@ static void gc_helper_get_regs(gc_helper_regs_t arr) {
 // just been allocated but not yet marked, and get incorrectly sweeped.
 MP_NOINLINE void gc_helper_collect_regs_and_stack(void) {
     gc_helper_regs_t regs;
+#ifdef USE_GC_NATIVE_HELPER
+    uintptr_t sp = gc_helper_get_regs_and_sp(regs);
+
+    // trace the stack, including the registers (since they live on the stack in this function)
+    gc_collect_root((void **)sp, ((uintptr_t)MP_STATE_THREAD(stack_top) - sp) / sizeof(uintptr_t));
+#else
     gc_helper_get_regs(regs);
     // GC stack (and regs because we captured them)
     void **regs_ptr = (void **)(void *)&regs;
     gc_collect_root(regs_ptr, ((uintptr_t)MP_STATE_THREAD(stack_top) - (uintptr_t)&regs) / sizeof(uintptr_t));
+#endif
 }
 
 #endif // MICROPY_ENABLE_GC
