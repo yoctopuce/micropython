@@ -26,7 +26,8 @@
 #ifndef MICROPY_INCLUDED_PY_OBJ_H
 #define MICROPY_INCLUDED_PY_OBJ_H
 
-#include <assert.h>
+// Yoctopuce - should not include assert.h everywhere !
+// #include <assert.h>
 
 #include "py/mpconfig.h"
 #include "py/misc.h"

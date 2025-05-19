@@ -70,29 +70,37 @@
     <CustomPropsFile Condition="'$(CustomPropsFile)'==''">msvc/user.props</CustomPropsFile>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <ClCompile />
+    <ClCompile>
+        <PreprocessorDefinitions>$(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link />
   </ItemDefinitionGroup>
   <Import Project="$(PyMsvcDir)sources.props" />
   <ItemGroup>
     <ClCompile Include="@(PyCoreSource)" />
-    <ClCompile Include="$(PyBaseDir)shared/runtime/gchelper_generic.c" >
+    <ClCompile Include="$(PyBaseDir)shared/runtime/gchelper_generic.c">
       <PreprocessorDefinitions>MICROPY_GCREGS_SETJMP</PreprocessorDefinitions>
     </ClCompile>
-    <ClCompile Include="$(PyBaseDir)mpy-cross\gccollect.c"/>
-    <ClCompile Include="$(PyBaseDir)mpy-cross\main.c"/>
+    <ClCompile Include="$(PyBaseDir)mpy-cross\gccollect.c" />
+    <ClCompile Include="$(PyBaseDir)mpy-cross\main.c" />
     <ClCompile Include="$(PyBaseDir)ports\windows\fmode.c" />
   </ItemGroup>
   <Import Project="$(PyMsvcDir)genhdr.targets" />
