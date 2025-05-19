@@ -41,15 +41,6 @@ const mp_obj_exception_t mp_const_GeneratorExit_obj = {{&mp_type_GeneratorExit},
 /******************************************************************************/
 /* generator wrapper                                                          */
 
-typedef struct _mp_obj_gen_instance_t {
-    mp_obj_base_t base;
-    // mp_const_none: Not-running, no exception.
-    // MP_OBJ_NULL: Running, no exception.
-    // other: Not running, pending exception.
-    mp_obj_t pend_exc;
-    mp_code_state_t code_state;
-} mp_obj_gen_instance_t;
-
 static mp_obj_t gen_wrap_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const mp_obj_t *args) {
     // A generating function is just a bytecode function with type mp_type_gen_wrap
     mp_obj_fun_bc_t *self_fun = MP_OBJ_TO_PTR(self_in);

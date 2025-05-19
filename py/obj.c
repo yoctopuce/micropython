@@ -33,6 +33,7 @@
 #include "py/objtype.h"
 #include "py/objint.h"
 #include "py/objstr.h"
+#include "py/objtuple.h"
 #include "py/runtime.h"
 #include "py/cstack.h"
 #include "py/stream.h" // for mp_obj_print
@@ -314,6 +315,36 @@ mp_int_t mp_obj_get_int(mp_const_obj_t arg) {
     return val;
 }
 
+#if MICROPY_LONGINT_IMPL != MICROPY_LONGINT_IMPL_NONE
+mp_uint_t mp_obj_get_uint(mp_const_obj_t arg) {
+    if (!mp_obj_is_exact_type(arg, &mp_type_int)) {
+        mp_obj_t as_int = mp_unary_op(MP_UNARY_OP_INT_MAYBE, (mp_obj_t)arg);
+        if (as_int == MP_OBJ_NULL) {
+            mp_raise_TypeError_int_conversion(arg);
+        }
+        arg = as_int;
+    }
+    return mp_obj_int_get_uint_checked(arg);
+}
+
+int64_t mp_obj_get_ll(mp_const_obj_t arg) {
+    if (!mp_obj_is_exact_type(arg, &mp_type_int)) {
+        mp_obj_t as_int = mp_unary_op(MP_UNARY_OP_INT_MAYBE, (mp_obj_t)arg);
+        if (as_int == MP_OBJ_NULL) {
+            mp_raise_TypeError_int_conversion(arg);
+        }
+        arg = as_int;
+    }
+    if (mp_obj_is_small_int(arg)) {
+        return MP_OBJ_SMALL_INT_VALUE(arg);
+    } else {
+        int64_t res;
+        mp_obj_int_to_bytes_impl((mp_obj_t)arg, MP_ENDIANNESS_BIG, sizeof(res), (byte *)&res);
+        return res;
+    }
+}
+#endif
+
 mp_int_t mp_obj_get_int_truncated(mp_const_obj_t arg) {
     if (mp_obj_is_int(arg)) {
         return mp_obj_int_get_truncated(arg);
@@ -420,7 +451,7 @@ void mp_obj_get_complex(mp_obj_t arg, mp_float_t *real, mp_float_t *imag) {
 
 // note: returned value in *items may point to the interior of a GC block
 void mp_obj_get_array(mp_obj_t o, size_t *len, mp_obj_t **items) {
-    if (mp_obj_is_type(o, &mp_type_tuple)) {
+    if (mp_obj_is_tuple_compatible(o)) {
         mp_obj_tuple_get(o, len, items);
     } else if (mp_obj_is_type(o, &mp_type_list)) {
         mp_obj_list_get(o, len, items);
