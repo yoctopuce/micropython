@@ -26,6 +26,10 @@ for i in range(11):
 for i in range(-1, 3):
     print(round(1.47, i))
 
+# test handling of round near single-precision floats overflow
+for x in range(1, 4):
+    print(round(1e37, x))
+
 # test inf and nan
 for val in (float("inf"), float("nan")):
     try:

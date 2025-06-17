@@ -37,6 +37,10 @@
 
 #if MICROPY_PY_BUILTINS_FLOAT
 #include <math.h>
+static inline int fp_expval(mp_float_t x) {
+    mp_float_union_t fb = {x};
+    return (int)fb.p.exp - MP_FLOAT_EXP_OFFSET;
+}
 #endif
 
 #if MICROPY_PY_IO
@@ -491,10 +495,14 @@ static mp_obj_t mp_builtin_round(size_t n_args, const mp_obj_t *args) {
     mp_float_t val = mp_obj_get_float(o_in);
     if (n_args > 1) {
         mp_int_t num_dig = mp_obj_get_int(args[1]);
-        mp_float_t mult = MICROPY_FLOAT_C_FUN(pow)(10, (mp_float_t)num_dig);
-        // TODO may lead to overflow
-        mp_float_t rounded = MICROPY_FLOAT_C_FUN(nearbyint)(val * mult) / mult;
-        return mp_obj_new_float(rounded);
+        // approximate decimal exponent of lowest mantissa bit using exponent
+        int dec_exp = (int)((fp_expval(val) - MP_FLOAT_FRAC_BITS) * MICROPY_FLOAT_CONST(0.3010299956639812));  // 1/log2(10)
+        if (dec_exp + num_dig <= 2) {
+            // mantissa may need rounding
+            mp_float_t mult = MICROPY_FLOAT_C_FUN(pow)(10, num_dig);
+            val = MICROPY_FLOAT_C_FUN(nearbyint)(val * mult) / mult;
+        }
+        return mp_obj_new_float(val);
     }
     mp_float_t rounded = MICROPY_FLOAT_C_FUN(nearbyint)(val);
     return mp_obj_new_int_from_float(rounded);
