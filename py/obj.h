@@ -184,6 +184,7 @@ static inline bool mp_obj_is_small_int(mp_const_obj_t o) {
 #define MP_OBJ_NEW_SMALL_INT(small_int) ((mp_obj_t)((((mp_uint_t)(small_int)) << 1) | 1))
 
 #if MICROPY_PY_BUILTINS_FLOAT
+#include <math.h>
 #define MP_OBJ_NEW_CONST_FLOAT(f) MP_ROM_PTR((mp_obj_t)((((((uint64_t)f) & ~3) | 2) + 0x80800000) & 0xffffffff))
 #define mp_const_float_e  MP_OBJ_NEW_CONST_FLOAT(0x402df854)
 #define mp_const_float_pi MP_OBJ_NEW_CONST_FLOAT(0x40490fdb)
@@ -203,7 +204,7 @@ static inline mp_float_t mp_obj_float_get(mp_const_obj_t o) {
     union {
         mp_float_t f;
         mp_uint_t u;
-    } num = {.u = ((mp_uint_t)o - 0x80800000u) & ~3u};
+    } num = {.u = ((mp_uint_t)o - 0x80800000u) };
     return num.f;
 }
 static inline mp_obj_t mp_obj_new_float(mp_float_t f) {
@@ -211,6 +212,10 @@ static inline mp_obj_t mp_obj_new_float(mp_float_t f) {
         mp_float_t f;
         mp_uint_t u;
     } num = {.f = f};
+    if (isnan(f)) {
+        // prevent creation of bad nanboxed pointers via array.array or struct
+        return (mp_obj_t)((((uint64_t)0xffc00000 & ~0x3u) | 2u) + 0x80800000u);
+    }
     return (mp_obj_t)(((num.u & ~0x3u) | 2u) + 0x80800000u);
 }
 #endif
