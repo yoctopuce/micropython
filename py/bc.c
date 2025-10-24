@@ -32,6 +32,7 @@
 #include "py/bc0.h"
 #include "py/bc.h"
 #include "py/objfun.h"
+#include "py/emitglue.h"
 
 #if MICROPY_DEBUG_VERBOSE // print debugging info
 #define DEBUG_PRINT (1)
@@ -320,7 +321,7 @@ static void mp_setup_code_state_helper(mp_code_state_t *code_state, size_t n_arg
 //    - code_state->fun_bc should contain a pointer to the function object
 //    - code_state->n_state should be the number of objects in the local state
 void mp_setup_code_state(mp_code_state_t *code_state, size_t n_args, size_t n_kw, const mp_obj_t *args) {
-    code_state->ip = code_state->fun_bc->bytecode;
+    code_state->ip = MP_FUN_BC_GET_BYTECODE(code_state->fun_bc);
     code_state->sp = &code_state->state[0] - 1;
     #if MICROPY_STACKLESS
     code_state->prev = NULL;

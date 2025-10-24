@@ -34,6 +34,7 @@
 #include "py/objgenerator.h"
 #include "py/objfun.h"
 #include "py/cstack.h"
+#include "py/emitglue.h"
 
 // Instance of GeneratorExit exception - needed by generator.close()
 const mp_obj_exception_t mp_const_GeneratorExit_obj = {{&mp_type_GeneratorExit}, 0, 0, NULL, (mp_obj_tuple_t *)&mp_const_empty_tuple_obj};
@@ -55,7 +56,7 @@ static mp_obj_t gen_wrap_call(mp_obj_t self_in, size_t n_args, size_t n_kw, cons
     mp_obj_fun_bc_t *self_fun = MP_OBJ_TO_PTR(self_in);
 
     // bytecode prelude: get state size and exception stack size
-    const uint8_t *ip = self_fun->bytecode;
+    const uint8_t *ip = MP_FUN_BC_GET_BYTECODE(self_fun);
     MP_BC_PRELUDE_SIG_DECODE(ip);
 
     // allocate the generator object, with room for local stack and exception stack

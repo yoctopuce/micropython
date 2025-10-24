@@ -1797,6 +1797,14 @@ typedef time_t mp_timestamp_t;
 #define MICROPY_PY_SYS_SETTRACE_USE_FULL_PRELUDE (!MICROPY_PY_SYS_SETTRACE_REDUCE_MEM_USAGE)
 #endif
 
+// Whether functions objects should duplicate information that is already
+// available from raw_code objects when SYS_SETTRACE is enabled.
+// This option requires 16 extra bytes of RAM for each function (1 GC unit).
+// It is currently required when machine code emitters are enabled.
+#ifndef MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN
+#define MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN (MICROPY_EMIT_MACHINE_CODE || !MICROPY_PY_SYS_SETTRACE_REDUCE_MEM_USAGE)
+#endif
+
 // Whether to provide "sys.getsizeof" function
 #ifndef MICROPY_PY_SYS_GETSIZEOF
 #define MICROPY_PY_SYS_GETSIZEOF (MICROPY_CONFIG_ROM_LEVEL_AT_LEAST_EVERYTHING)

@@ -34,6 +34,7 @@
 #include "py/objfun.h"
 #include "py/runtime.h"
 #include "py/bc.h"
+#include "py/emitglue.h"
 #include "py/cstack.h"
 
 #if MICROPY_DEBUG_VERBOSE // print debugging info
@@ -134,7 +135,7 @@ MP_DEFINE_CONST_OBJ_TYPE(
 
 qstr mp_obj_fun_get_name(mp_const_obj_t fun_in) {
     const mp_obj_fun_bc_t *fun = MP_OBJ_TO_PTR(fun_in);
-    const byte *bc = fun->bytecode;
+    const byte *bc = MP_FUN_BC_GET_BYTECODE(fun);
 
     #if MICROPY_EMIT_NATIVE
     if (fun->base.type == &mp_type_fun_native || fun->base.type == &mp_type_native_gen_wrap) {
@@ -264,7 +265,8 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const 
     mp_obj_fun_bc_t *self = MP_OBJ_TO_PTR(self_in);
 
     size_t n_state, state_size;
-    DECODE_CODESTATE_SIZE(self->bytecode, n_state, state_size);
+    const byte *bc = MP_FUN_BC_GET_BYTECODE(self);
+    DECODE_CODESTATE_SIZE(bc, n_state, state_size);
 
     // allocate state for locals and stack
     mp_code_state_t *code_state = NULL;
@@ -371,9 +373,9 @@ void mp_obj_fun_bc_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
         const mp_obj_fun_bc_t *self = MP_OBJ_TO_PTR(self_in);
         if ((self->base.type == &mp_type_fun_bc
              || self->base.type == &mp_type_gen_wrap)
-            && self->child_table == NULL) {
+            && MP_FUN_BC_GET_CHILDREN(self) == NULL) {
             #if MICROPY_PY_BUILTINS_CODE <= MICROPY_PY_BUILTINS_CODE_BASIC
-            dest[0] = mp_obj_new_code(self->context->constants, self->bytecode);
+            dest[0] = mp_obj_new_code(self->context->constants, MP_FUN_BC_GET_BYTECODE(self));
             #else
             dest[0] = mp_obj_new_code(self->context, self->rc, true);
             #endif
@@ -428,9 +430,11 @@ mp_obj_t mp_obj_new_fun_bc(const mp_obj_t *def_args, const byte *code, const mp_
         n_extra_args += 1;
     }
     mp_obj_fun_bc_t *o = mp_obj_malloc_var(mp_obj_fun_bc_t, extra_args, mp_obj_t, n_extra_args, &mp_type_fun_bc);
-    o->bytecode = code;
     o->context = context;
+    #if !MICROPY_PY_SYS_SETTRACE || MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN
+    o->bytecode = code;
     o->child_table = child_table;
+    #endif
     if (def_pos_args != NULL) {
         memcpy(o->extra_args, def_pos_args->items, n_def_args * sizeof(mp_obj_t));
     }

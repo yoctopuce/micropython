@@ -32,8 +32,10 @@
 typedef struct _mp_obj_fun_bc_t {
     mp_obj_base_t base;
     const mp_module_context_t *context;         // context within which this function was defined
+    #if !MICROPY_PY_SYS_SETTRACE || MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN
     struct _mp_raw_code_t *const *child_table;  // table of children
     const byte *bytecode;                       // bytecode for the function
+    #endif
     #if MICROPY_PY_SYS_SETTRACE
     const struct _mp_raw_code_t *rc;
     #endif
@@ -42,6 +44,13 @@ typedef struct _mp_obj_fun_bc_t {
     //  - a single slot for default kw args dict (if it has them)
     mp_obj_t extra_args[];
 } mp_obj_fun_bc_t;
+#if !MICROPY_PY_SYS_SETTRACE || MICROPY_PY_SYS_SETTRACE_USE_ORIGINAL_OBJ_FUN
+#define MP_FUN_BC_GET_BYTECODE(fun_bc) ((fun_bc)->bytecode)
+#define MP_FUN_BC_GET_CHILDREN(fun_bc) ((fun_bc)->child_table)
+#else
+#define MP_FUN_BC_GET_BYTECODE(fun_bc) ((fun_bc)->rc->fun_data)
+#define MP_FUN_BC_GET_CHILDREN(fun_bc) ((fun_bc)->rc->children)
+#endif
 
 typedef struct _mp_obj_fun_asm_t {
     mp_obj_base_t base;

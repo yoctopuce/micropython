@@ -102,7 +102,7 @@
 
 #define DECODE_PTR \
     DECODE_UINT; \
-    void *ptr = (void *)(uintptr_t)code_state->fun_bc->child_table[unum]
+    void *ptr = (void *)(uintptr_t)MP_FUN_BC_GET_CHILDREN(code_state->fun_bc)[unum]
 
 #define DECODE_OBJ \
     DECODE_UINT; \
@@ -1441,7 +1441,7 @@ unwind_loop:
             if (nlr.ret_val != &mp_const_GeneratorExit_obj
                 && *code_state->ip != MP_BC_END_FINALLY
                 && *code_state->ip != MP_BC_RAISE_LAST) {
-                const byte *ip = code_state->fun_bc->bytecode;
+                const byte *ip = MP_FUN_BC_GET_BYTECODE(code_state->fun_bc);
                 MP_BC_PRELUDE_SIG_DECODE(ip);
                 MP_BC_PRELUDE_SIZE_DECODE(ip);
                 const byte *line_info_top = ip + n_info;
